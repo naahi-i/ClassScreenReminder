@@ -270,12 +270,6 @@ class MainWindow(QMainWindow):
         
         main_layout.addLayout(content_layout)
         
-        # 底部状态区域
-        status_bar = QLabel("应用会在后台自动运行，检查提醒并显示在屏幕上")
-        status_bar.setObjectName("statusLabel")
-        status_bar.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(status_bar)
-        
         # 更新提醒列表
         self.update_reminder_list()
     
