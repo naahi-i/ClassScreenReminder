@@ -83,7 +83,9 @@ if __name__ == "__main__":
     # 初始化配置管理器并创建主窗口
     config_manager = ConfigManager()
     main_window = MainWindow(config_manager)
-    main_window.show()
+    
+    # 默认不显示主窗口，仅在托盘中显示
+    # main_window.show()
     
     # 运行应用
     sys.exit(app.exec())

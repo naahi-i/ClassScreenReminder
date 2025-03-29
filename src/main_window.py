@@ -243,9 +243,6 @@ class MainWindow(QMainWindow):
         self.tray_icon.activated.connect(self.tray_icon_activated)
         self.tray_icon.show()
         
-        # 设置托盘提示但不显示气泡提示
-        self.tray_icon.setToolTip("屏幕提醒")
-    
     def closeEvent(self, event: QCloseEvent):
         """最小化到托盘"""
         if self.minimize_to_tray and self.tray_icon.isVisible():
