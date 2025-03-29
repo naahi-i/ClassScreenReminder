@@ -1,6 +1,3 @@
-"""
-配置管理类 - 处理应用配置的保存和加载
-"""
 import os
 import json
 import logging
@@ -23,12 +20,11 @@ class ConfigManager:
         """初始化配置管理器"""
         # 获取用户配置目录
         self.app_data_dir = os.path.join(
-            os.environ.get('APPDATA', 
-                          os.path.expanduser('~/.config')),
+            os.environ.get('APPDATA', os.path.expanduser('~/.config')),
             'ClassScreenReminder'
         )
         
-        # 创建配置目录(如果不存在)
+        # 创建配置目录
         os.makedirs(self.app_data_dir, exist_ok=True)
         
         # 配置文件路径
@@ -48,8 +44,7 @@ class ConfigManager:
             }
         }
         
-        with open(self.config_file, 'w', encoding='utf-8') as f:
-            json.dump(default_config, f, ensure_ascii=False, indent=4)
+        self.save_config(default_config)
     
     def load_config(self):
         """加载配置文件"""
@@ -66,39 +61,30 @@ class ConfigManager:
         with open(self.config_file, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=4)
     
+    def _sanitize_reminder_duration(self, reminder):
+        """确保提醒持续时间合法"""
+        if "duration" in reminder:
+            try:
+                reminder["duration"] = max(1, int(reminder["duration"]))
+            except (ValueError, TypeError):
+                reminder["duration"] = 10
+        return reminder
+    
     def load_reminders(self):
         """加载提醒列表"""
         config = self.load_config()
         reminders = config.get("reminders", [])
         
-        # 确保所有提醒的持续时间是整数
-        for reminder in reminders:
-            if "duration" in reminder:
-                try:
-                    reminder["duration"] = int(reminder["duration"])
-                    # 确保duration至少为1秒
-                    if reminder["duration"] < 1:
-                        reminder["duration"] = 10
-                except (ValueError, TypeError):
-                    reminder["duration"] = 10
-        
-        return reminders
+        # 确保所有提醒的持续时间是合法的整数
+        return [self._sanitize_reminder_duration(reminder) for reminder in reminders]
     
     def save_reminders(self, reminders):
         """保存提醒列表"""
         # 确保持续时间是整数
-        for reminder in reminders:
-            if "duration" in reminder:
-                try:
-                    reminder["duration"] = int(reminder["duration"])
-                    # 确保duration至少为1秒
-                    if reminder["duration"] < 1:
-                        reminder["duration"] = 10
-                except (ValueError, TypeError):
-                    reminder["duration"] = 10
+        sanitized_reminders = [self._sanitize_reminder_duration(reminder) for reminder in reminders]
         
         config = self.load_config()
-        config["reminders"] = reminders
+        config["reminders"] = sanitized_reminders
         self.save_config(config)
     
     def get_setting(self, key, default=None):
@@ -123,13 +109,3 @@ if __name__ == "__main__":
     print(f"已加载 {len(reminders)} 个提醒:")
     for i, reminder in enumerate(reminders):
         print(f"  {i+1}. {reminder['time']} - {reminder['message']} ({reminder['duration']}秒)")
-    
-    # 如果需要添加测试提醒，取消下面的注释
-    # test_reminder = {
-    #     "time": "12:00",
-    #     "message": "测试提醒",
-    #     "duration": 15
-    # }
-    # reminders.append(test_reminder)
-    # config_manager.save_reminders(reminders)
-    # print("已添加测试提醒")

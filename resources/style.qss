@@ -5,8 +5,8 @@
     color: #202020;
 }
 
-/* 窗口背景和标题栏样式 */
-QMainWindow {
+/* 窗口和容器样式 */
+QMainWindow, #mainContainer {
     background-color: #fafafa;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
@@ -17,19 +17,22 @@ QMainWindow::title {
     color: #202020;
 }
 
-/* 应用容器 */
-#mainContainer {
+#centralWidget {
     background-color: #fafafa;
-    border-radius: 10px;
-    border: 1px solid #e0e0e0;
+    border: none;
 }
 
-/* 标题栏 */
+/* 标题区域样式 */
 #titleBar {
     background-color: #f5f5f5;
     border-top-left-radius: 10px;
     border-top-right-radius: 10px;
     border-bottom: 1px solid #e0e0e0;
+}
+
+#titleFrame {
+    border-bottom: 1px solid #e0e0e0;
+    background-color: transparent;
 }
 
 #windowTitle {
@@ -38,19 +41,6 @@ QMainWindow::title {
     color: #404040;
 }
 
-/* 中央部件 */
-#centralWidget {
-    background-color: #fafafa;
-    border: none;
-}
-
-/* 标题栏下的分隔线 */
-#titleFrame {
-    border-bottom: 1px solid #e0e0e0;
-    background-color: transparent;
-}
-
-/* 标题标签 */
 #titleLabel {
     color: #202020;
     font-size: 24px;
@@ -73,7 +63,7 @@ QMainWindow::title {
     border: 1px solid #e0e0e0;
 }
 
-/* 按钮样式 */
+/* 按钮通用样式 */
 QPushButton {
     border-radius: 5px;
     padding: 8px 16px;
@@ -82,49 +72,34 @@ QPushButton {
     font-weight: 500;
 }
 
+/* 主按钮样式 */
 #primaryButton {
     background-color: #0078d4;
     color: white;
     border: none;
 }
+#primaryButton:hover { background-color: #106ebe; }
+#primaryButton:pressed { background-color: #005a9e; }
 
-#primaryButton:hover {
-    background-color: #106ebe;
-}
-
-#primaryButton:pressed {
-    background-color: #005a9e;
-}
-
+/* 次要按钮样式 */
 #secondaryButton {
     background-color: #e1e1e1;
     color: #202020;
     border: none;
 }
+#secondaryButton:hover { background-color: #d1d1d1; }
+#secondaryButton:pressed { background-color: #c1c1c1; }
 
-#secondaryButton:hover {
-    background-color: #d1d1d1;
-}
-
-#secondaryButton:pressed {
-    background-color: #c1c1c1;
-}
-
+/* 操作按钮样式 */
 #actionButton {
     background-color: white;
     color: #0078d4;
     border: 1px solid #0078d4;
 }
+#actionButton:hover { background-color: #f0f7fd; }
+#actionButton:pressed { background-color: #e5f1fb; }
 
-#actionButton:hover {
-    background-color: #f0f7fd;
-}
-
-#actionButton:pressed {
-    background-color: #e5f1fb;
-}
-
-/* 输入框样式 */
+/* 输入控件样式 */
 QLineEdit, QTimeEdit, QSpinBox {
     border: 1px solid #d1d1d1;
     border-radius: 4px;
@@ -133,10 +108,23 @@ QLineEdit, QTimeEdit, QSpinBox {
     color: #333333;
     font-size: 14px;
     min-height: 20px;
+    padding-right: 15px; /* 留出空间给上下箭头 */
 }
 
 QLineEdit:focus, QTimeEdit:focus, QSpinBox:focus {
     border-color: #0078d4;
+}
+
+/* 隐藏输入框上下按钮 */
+QSpinBox::up-button, QSpinBox::down-button,
+QTimeEdit::up-button, QTimeEdit::down-button,
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button,
+QDateEdit::up-button, QDateEdit::down-button,
+QDateTimeEdit::up-button, QDateTimeEdit::down-button {
+    width: 0px;
+    height: 0px;
+    border: none;
+    background: transparent;
 }
 
 /* 列表样式 */
@@ -166,7 +154,7 @@ QListWidget::item:hover:!selected {
     background-color: #f5f5f5;
 }
 
-/* 菜单栏样式 - Win11风格 */
+/* 菜单栏样式 */
 QMenuBar {
     background-color: #f5f5f5;
     border-bottom: 1px solid #e0e0e0;
@@ -193,7 +181,7 @@ QMenuBar::item:pressed {
     color: #0078d4;
 }
 
-/* 菜单样式 - 更接近Win11风格 */
+/* 菜单样式 */
 QMenu {
     background-color: #ffffff;
     border: 1px solid #e0e0e0;
@@ -289,13 +277,6 @@ QFormLayout QLabel {
     font-weight: 500;
 }
 
-/* 状态标签 */
-#statusLabel {
-    color: #707070;
-    font-size: 12px;
-    padding: 8px 0px;
-}
-
 /* 工具提示样式 */
 QToolTip {
     background-color: #ffffff;
@@ -306,12 +287,7 @@ QToolTip {
     font-size: 13px;
 }
 
-/* 控件边距 */
-QTimeEdit, QSpinBox {
-    padding-right: 15px; /* 留出空间给上下箭头 */
-}
-
-/* 处理滚动区域 */
+/* 滚动条样式 */
 QScrollBar:vertical {
     border: none;
     background: #f0f0f0;
@@ -349,19 +325,5 @@ QDialog QLabel {
 }
 
 QDialog QPushButton {
-    min-width: 88px;
-}
-
-/* 消息框样式 */
-QMessageBox {
-    background-color: #fafafa;
-}
-
-QMessageBox QLabel {
-    color: #333333;
-    font-size: 14px;
-}
-
-QMessageBox QPushButton {
     min-width: 88px;
 }

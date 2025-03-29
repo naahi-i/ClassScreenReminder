@@ -1,23 +1,28 @@
-"""
-ClassScreenReminder - 课堂屏幕提醒应用
-主程序入口文件
-"""
 import sys
 import os
 import logging
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import QFile, QTextStream, Qt
-from PySide6.QtMultimedia import QMediaPlayer  # 添加多媒体模块支持
+
+# 添加src目录到Python路径
+current_dir = os.path.dirname(os.path.abspath(__file__))
+src_dir = os.path.join(current_dir, "src")
+if src_dir not in sys.path:
+    sys.path.append(src_dir)
 
 from src.main_window import MainWindow
 from src.config_manager import ConfigManager
-from src.reminder_screen import initialize_sound  # 导入声音初始化函数
+from src.reminder_screen import initialize_sound
 
-# 配置日志记录 - 简化版
+# 配置日志记录
+log_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~/.config')), 'ClassScreenReminder')
+os.makedirs(log_dir, exist_ok=True)
 logging.basicConfig(
-    level=logging.ERROR,  # 只显示错误
+    level=logging.ERROR,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    filename=os.path.join(log_dir, 'app.log'),
+    filemode='a'
 )
 
 def load_stylesheet(resource):
@@ -28,45 +33,55 @@ def load_stylesheet(resource):
     stream = QTextStream(file)
     return stream.readAll()
 
+def check_single_instance():
+    """检查是否已有实例运行"""
+    if sys.platform == 'win32':
+        try:
+            import win32event
+            import win32api
+            import winerror
+            
+            mutex_name = "ClassScreenReminderMutex"
+            mutex = win32event.CreateMutex(None, False, mutex_name)
+            return win32api.GetLastError() != winerror.ERROR_ALREADY_EXISTS
+        except ImportError:
+            return True
+    return True
+
 if __name__ == "__main__":
+    # 检查是否已有实例在运行
+    if not check_single_instance():
+        sys.exit(0)
+    
     # 创建应用程序
     app = QApplication(sys.argv)
     app.setApplicationName("ClassScreenReminder")
     
-    # 设置应用图标 - 使用根目录的icon.ico
-    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")
+    # 应用根目录
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # 设置应用图标
+    icon_path = os.path.join(app_dir, "icon.ico")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
     
-    # 设置高DPI缩放 - 提高文字清晰度
+    # 设置高DPI缩放
     app.setAttribute(Qt.AA_UseHighDpiPixmaps)
     app.setAttribute(Qt.AA_EnableHighDpiScaling)
     
-    # 加载风格样式表
-    style_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "style.qss")
+    # 确保资源目录存在并加载样式表
+    resources_dir = os.path.join(app_dir, "resources")
+    os.makedirs(resources_dir, exist_ok=True)
+    
+    style_path = os.path.join(resources_dir, "style.qss")
     if os.path.exists(style_path):
         app.setStyleSheet(load_stylesheet(style_path))
     
-    # 确保资源目录存在
-    resources_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources")
-    if not os.path.exists(resources_dir):
-        os.makedirs(resources_dir)
-        print(f"已创建资源目录: {resources_dir}")
+    # 静默加载声音资源
+    initialize_sound()
     
-    # 检查音频文件是否存在
-    sound_file = os.path.join(resources_dir, "attend_class.wav")
-    if not os.path.exists(sound_file):
-        print(f"警告: 找不到声音文件 {sound_file}")
-        print("请确保在resources目录中有attend_class.wav文件")
-    else:
-        # 启动时预加载声音资源
-        print("预加载声音资源...")
-        initialize_sound()
-    
-    # 初始化配置管理器
+    # 初始化配置管理器并创建主窗口
     config_manager = ConfigManager()
-    
-    # 创建并显示主窗口
     main_window = MainWindow(config_manager)
     main_window.show()
     
