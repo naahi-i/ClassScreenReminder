@@ -146,6 +146,12 @@ class ReminderScreen(QWidget):
         self.enter_animations = {}
         self.exit_animations = {}
         
+        # 添加状态标志
+        self.is_closing = False
+        self.is_entering = True  # 标记正在播放入场动画
+        self.click_count = 0     # 点击计数
+        self.last_click_time = 0 # 上次点击时间
+        
         # 重复播放计时器
         self.sound_repeat_timer = QTimer(self)
         self.sound_repeat_timer.timeout.connect(self.play_sound_group)
@@ -289,7 +295,7 @@ class ReminderScreen(QWidget):
             message_layout.addWidget(msg_label)
         
         # 添加提示信息
-        self.hint_label = QLabel("点击任意位置或按ESC键关闭", self)
+        self.hint_label = QLabel("双击任意位置或按ESC键关闭", self)
         self.hint_label.setAlignment(Qt.AlignRight | Qt.AlignBottom)
         self.hint_label.setStyleSheet("""
             color: rgba(255, 255, 255, 0.7);
@@ -349,6 +355,9 @@ class ReminderScreen(QWidget):
             'accent': anim_accent
         }
         
+        # 设置最后一个动画完成时的回调，标记入场动画完成
+        anim_accent.finished.connect(self.on_enter_animations_finished)
+        
         # 启动动画序列
         anim_backdrop.start()  # 先启动背景
         
@@ -358,8 +367,25 @@ class ReminderScreen(QWidget):
         QTimer.singleShot(600, lambda: self.enter_animations['c'].start())
         QTimer.singleShot(800, lambda: self.enter_animations['accent'].start())
     
+    def on_enter_animations_finished(self):
+        """入场动画完成时的回调"""
+        self.is_entering = False
+    
     def start_close_animation(self):
         """开始退场动画"""
+        # 如果已经在关闭中，则不重复触发
+        if self.is_closing:
+            return
+            
+        # 如果入场动画还在进行中，则等待入场动画完成后再关闭
+        if self.is_entering:
+            # 只设置关闭定时器，不立即关闭
+            QTimer.singleShot(200, self.check_and_start_close)
+            return
+            
+        # 设置关闭状态标志
+        self.is_closing = True
+        
         # 停止声音定时器
         self.sound_repeat_timer.stop()
         
@@ -419,15 +445,35 @@ class ReminderScreen(QWidget):
         QTimer.singleShot(600, lambda: self.exit_animations['b'].start())
         QTimer.singleShot(800, lambda: self.exit_animations['backdrop'].start())
     
+    def check_and_start_close(self):
+        """检查入场动画是否完成，然后开始退场动画"""
+        if not self.is_entering:
+            self.start_close_animation()
+        else:
+            # 继续等待
+            QTimer.singleShot(200, self.check_and_start_close)
+    
     def mousePressEvent(self, event):
-        """处理鼠标点击事件"""
-        self.close_timer.stop()
-        self.sound_repeat_timer.stop()  # 停止声音重复播放
-        self.start_close_animation()
+        """处理鼠标点击事件，改为双击关闭"""
+        current_time = time.time()
+        
+        # 如果是快速双击（时间间隔小于500毫秒）
+        if current_time - self.last_click_time < 0.5:
+            self.click_count += 1
+            if self.click_count >= 2:  # 双击检测
+                self.click_count = 0
+                self.close_timer.stop()
+                self.sound_repeat_timer.stop()  # 停止声音重复播放
+                self.start_close_animation()
+        else:
+            # 重置点击计数
+            self.click_count = 1
+        
+        self.last_click_time = current_time
         super().mousePressEvent(event)
     
     def keyPressEvent(self, event):
-        """处理按键事件"""
+        """处理按键事件，ESC仍然可以直接关闭"""
         if event.key() == Qt.Key_Escape:
             self.close_timer.stop()
             self.sound_repeat_timer.stop()  # 停止声音重复播放
