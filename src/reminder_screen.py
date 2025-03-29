@@ -126,12 +126,14 @@ LightEffectBlock = ColorBlock
 class ReminderScreen(QWidget):
     """全屏提醒窗口类"""
     
-    def __init__(self, message, duration=10):
-        # 在创建窗口前先播放声音
-        play_initial_sound()
+    def __init__(self, message, duration=10, play_sound=True):
+        # 根据设置决定是否播放声音
+        if play_sound:
+            play_initial_sound()
         
         super().__init__()
         self.message = message
+        self.play_sound = play_sound  # 保存声音设置
         
         # 确保duration是整数并且大于0
         try:
@@ -147,7 +149,8 @@ class ReminderScreen(QWidget):
         # 重复播放计时器
         self.sound_repeat_timer = QTimer(self)
         self.sound_repeat_timer.timeout.connect(self.play_sound_group)
-        self.sound_repeat_timer.start(4000)
+        if self.play_sound:  # 仅在启用声音时启动计时器
+            self.sound_repeat_timer.start(4000)
         
         self.setup_ui()
         self.start_animations()
@@ -160,6 +163,9 @@ class ReminderScreen(QWidget):
     
     def play_sound_group(self):
         """播放一组提示音"""
+        if not self.play_sound:  # 如果禁用声音，直接返回
+            return
+            
         global _is_second_sound_playing
         if not _is_second_sound_playing:
             play_initial_sound()

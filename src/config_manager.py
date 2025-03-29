@@ -68,6 +68,12 @@ class ConfigManager:
                 reminder["duration"] = max(1, int(reminder["duration"]))
             except (ValueError, TypeError):
                 reminder["duration"] = 10
+        
+        # 确保play_sound字段存在，默认为True
+        reminder.setdefault("play_sound", True)
+        
+        # 确保weekdays字段存在且长度为7，默认为一周所有天都启用
+        reminder["weekdays"] = (reminder.get("weekdays", [True] * 7)[:7] + [True] * 7)[:7]
         return reminder
     
     def load_reminders(self):
