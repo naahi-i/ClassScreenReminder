@@ -8,17 +8,37 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                               QFormLayout, QSpinBox, QApplication, QFrame, 
                               QTextEdit, QCheckBox)
 from PySide6.QtCore import Qt, QTime, QTimer
-# 添加QCloseEvent到导入列表
 from PySide6.QtGui import QIcon, QAction, QCloseEvent
 
-# 简化导入，使用直接导入
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.append(current_dir)
-
-import reminder_screen
-from reminder_screen import ReminderScreen, play_initial_sound
-from config_manager import ConfigManager
+# 修改导入方式以支持打包
+try:
+    # 正常导入方式
+    from src.reminder_screen import ReminderScreen, play_initial_sound
+    from src.config_manager import ConfigManager
+except ImportError:
+    # 打包后导入方式
+    try:
+        from . import reminder_screen
+        from .reminder_screen import ReminderScreen, play_initial_sound
+        from .config_manager import ConfigManager
+    except ImportError:
+        try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            if current_dir not in sys.path:
+                sys.path.append(current_dir)
+            parent_dir = os.path.dirname(current_dir)
+            if parent_dir not in sys.path:
+                sys.path.append(parent_dir)
+            
+            import src.reminder_screen
+            from src.reminder_screen import ReminderScreen, play_initial_sound
+            from src.config_manager import ConfigManager
+        except ImportError:
+            # 最后尝试直接导入
+            sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            import reminder_screen
+            from reminder_screen import ReminderScreen, play_initial_sound
+            from config_manager import ConfigManager
 
 # 获取logger
 logger = logging.getLogger("ClassScreenReminder.MainWindow")
