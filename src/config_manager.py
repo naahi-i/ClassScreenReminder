@@ -39,13 +39,14 @@ class ConfigManager:
         default_config = {
             "reminders": [],
             "settings": {
-                "start_with_windows": True,  # 默认开机自启动
-                "minimize_to_tray": True,    # 默认关闭时最小化到托盘
-                "startup_minimized": True,   # 默认启动时最小化
-                "wallpaper_path": "",        # 保留旧版本兼容性
-                "wallpapers": {},            # 新增多区域壁纸设置
-                "theme": "light",            # 新增主题设置: light或dark
-                "accent_color": "#0067C0"    # 强调色
+                "start_with_windows": False,     # 默认开机自启动
+                "minimize_to_tray": True,       # 默认关闭时最小化到托盘
+                "startup_minimized": True,      # 默认启动时最小化
+                "wallpaper_path": "",           # 保留旧版本兼容性
+                "wallpapers": {},               # 新增多区域壁纸设置
+                "theme": "light",               # 新增主题设置: light或dark
+                "accent_color": "#0067C0",      # 强调色
+                "custom_audio_path": ""         # 自定义音频路径
             }
         }
         

@@ -9,6 +9,7 @@ from .page_builders.reminders_page import create_reminders_page
 from .page_builders.wallpaper_page import create_wallpaper_page
 from .page_builders.settings_page import create_settings_page
 from .page_builders.about_page import create_about_page
+from .page_builders.audio_page import create_audio_page
 
 class MainWindowUI:
     """主窗口UI构建器，负责创建和设置UI组件"""
@@ -58,6 +59,7 @@ class MainWindowUI:
         # 创建不同功能页面
         self._create_reminders_page()
         self._create_wallpaper_page()
+        self._create_audio_page()
         self._create_settings_page()
         
         # 将内容容器添加到主布局
@@ -73,6 +75,7 @@ class MainWindowUI:
         menu_items = [
             ("reminders", "提醒管理", True),
             ("wallpapers", "背景图片", False),
+            ("audio", "音频设置", False),
             ("settings", "应用设置", False)
         ]
         
@@ -120,16 +123,22 @@ class MainWindowUI:
         self.main_window.content_stack.addWidget(page)
         self.content_pages["wallpapers"] = 1  # 保存页面索引
     
+    def _create_audio_page(self):
+        """创建音频设置页面"""
+        page = create_audio_page(self.main_window)
+        self.main_window.content_stack.addWidget(page)
+        self.content_pages["audio"] = 2  # 保存页面索引
+    
     def _create_settings_page(self):
         """创建应用设置页面"""
         page = create_settings_page(self.main_window)
         self.main_window.content_stack.addWidget(page)
-        self.content_pages["settings"] = 2  # 保存页面索引
+        self.content_pages["settings"] = 3  # 保存页面索引
         
         # 创建关于页面
         about_page = create_about_page(self.main_window)
         self.main_window.content_stack.addWidget(about_page)
-        self.content_pages["about"] = 3  # 保存页面索引
+        self.content_pages["about"] = 4  # 保存页面索引
     
     def show_message(self, title, message, icon=QMessageBox.Information):
         """显示消息对话框"""
