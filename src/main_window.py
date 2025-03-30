@@ -1,44 +1,41 @@
-import sys
 import os
+import sys
 import logging
 from datetime import datetime
-from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                              QLabel, QPushButton, QTimeEdit, QListWidget, 
-                              QListWidgetItem, QSystemTrayIcon, QMenu, QMessageBox, 
-                              QFormLayout, QSpinBox, QApplication, QFrame, 
-                              QTextEdit, QCheckBox, QGroupBox, QGridLayout)
-from PySide6.QtCore import Qt, QTime, QTimer
-from PySide6.QtGui import QIcon, QAction, QCloseEvent
+from PySide6.QtWidgets import QMainWindow, QSystemTrayIcon, QMenu, QMessageBox, QApplication, QFileDialog
+from PySide6.QtCore import Qt, QTime, QTimer, QEvent, QObject, QSize, Slot, QUrl
+from PySide6.QtGui import QIcon, QAction, QCloseEvent, QPixmap
 
-# 修改导入方式以支持打包
+# 修改导入方式以支持新的目录结构
 try:
-    # 正常导入方式
-    from src.reminder_screen import ReminderScreen, play_initial_sound
-    from src.config_manager import ConfigManager
+    # 包内导入
+    from .components.reminder_screen import ReminderScreen
+    from .components.ui_builder import MainWindowUI
+    from .utils.reminder_manager import ReminderManager
+    from .utils.autostart_manager import get_autostart_status, set_autostart
+    from .config_manager import ConfigManager
+    from .utils.wallpaper_manager import WallpaperManager
 except ImportError:
-    # 打包后导入方式
+    # 打包后或直接运行时的导入
     try:
-        from . import reminder_screen
-        from .reminder_screen import ReminderScreen, play_initial_sound
-        from .config_manager import ConfigManager
-    except ImportError:
-        try:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            if current_dir not in sys.path:
-                sys.path.append(current_dir)
-            parent_dir = os.path.dirname(current_dir)
-            if parent_dir not in sys.path:
-                sys.path.append(parent_dir)
-            
-            import src.reminder_screen
-            from src.reminder_screen import ReminderScreen, play_initial_sound
-            from src.config_manager import ConfigManager
-        except ImportError:
-            # 最后尝试直接导入
-            sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            import reminder_screen
-            from reminder_screen import ReminderScreen, play_initial_sound
-            from config_manager import ConfigManager
+        # 确保src目录在路径中
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        if current_dir not in sys.path:
+            sys.path.append(current_dir)
+        parent_dir = os.path.dirname(current_dir)
+        if parent_dir not in sys.path:
+            sys.path.append(parent_dir)
+        
+        # 尝试从绝对路径导入
+        from src.components.reminder_screen import ReminderScreen
+        from src.components.ui_builder import MainWindowUI
+        from src.utils.reminder_manager import ReminderManager
+        from src.utils.autostart_manager import get_autostart_status, set_autostart
+        from src.config_manager import ConfigManager
+        from src.utils.wallpaper_manager import WallpaperManager
+    except ImportError as e:
+        print(f"导入错误: {e}")
+        sys.exit(1)
 
 # 获取logger
 logger = logging.getLogger("ClassScreenReminder.MainWindow")
@@ -49,240 +46,66 @@ class MainWindow(QMainWindow):
     def __init__(self, config_manager):
         super().__init__()  # 使用默认窗口风格，保留Windows动画
         self.config_manager = config_manager
-        self.reminders = self.config_manager.load_reminders()
+        
+        # 初始化提醒管理器
+        self.reminder_manager = ReminderManager(config_manager)
+        
+        # 初始化UI构建器
+        self.ui_builder = MainWindowUI(self)
+        
+        # 初始化壁纸管理器
+        self.wallpaper_manager = WallpaperManager(config_manager)
+        
+        # 当前显示的提醒屏幕
         self.reminder_screen = None
+        
+        # 设置检查提醒的定时器
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.check_reminders)
         self.timer.start(10000)  # 每10秒检查一次提醒
         
-        # 添加上次提醒时间记录，防止同一分钟内重复触发
-        self.last_reminder_time = ""
-        
-        self.setup_ui()
-        self.setup_tray()
-        
         # 加载设置
-        self.minimize_to_tray = self.config_manager.get_setting("minimize_to_tray", True)
-        self.start_with_windows = self.config_manager.get_setting("start_with_windows", False)
+        self.minimize_to_tray = True  # 强制设置为True
+        self.start_with_windows = self.config_manager.get_setting("start_with_windows", True)  # 默认True
+        self.startup_minimized = self.config_manager.get_startup_minimized()
         
-        # 初始化自启动状态
-        self.update_autostart_status()
-    
-    def setup_ui(self):
-        """设置用户界面"""
-        self.setWindowTitle("屏幕提醒")
-        self.setMinimumSize(700, 550)  # 增加窗口尺寸以适应控件
-        
-        # 设置窗口图标
-        icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icon.ico")
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
-        
-        # 创建中央部件
-        central_widget = QWidget()
-        central_widget.setObjectName("centralWidget")
-        self.setCentralWidget(central_widget)
-        
-        # 主布局
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(16)
-        
-        # 标题
-        title_frame = QFrame()
-        title_frame.setObjectName("titleFrame")
-        title_layout = QHBoxLayout(title_frame)
-        title_layout.setContentsMargins(0, 0, 0, 12)
-        
-        title_label = QLabel("屏幕提醒设置")
-        title_label.setObjectName("titleLabel")
-        title_layout.addWidget(title_label)
-        main_layout.addWidget(title_frame)
-        
-        # 主体区域使用水平布局
-        content_layout = QHBoxLayout()
-        content_layout.setSpacing(20)
-        
-        # 左侧 - 提醒列表区域
-        left_panel = QFrame()
-        left_panel.setObjectName("leftPanel")
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(10)
-        
-        list_label = QLabel("已设置的提醒:")
-        list_label.setObjectName("sectionLabel")
-        left_layout.addWidget(list_label)
-        
-        self.reminder_list = QListWidget()
-        self.reminder_list.setObjectName("reminderList")
-        self.reminder_list.setMinimumHeight(400)  # 增加高度
-        self.reminder_list.setMinimumWidth(300)   # 设置最小宽度
-        left_layout.addWidget(self.reminder_list)
-        
-        # 操作按钮布局
-        list_buttons_layout = QHBoxLayout()
-        list_buttons_layout.setSpacing(8)
-        
-        self.edit_button = QPushButton("编辑选中")
-        self.edit_button.setObjectName("actionButton")
-        self.edit_button.clicked.connect(self.edit_reminder)
-        list_buttons_layout.addWidget(self.edit_button)
-        
-        self.delete_button = QPushButton("删除提醒")
-        self.delete_button.setObjectName("secondaryButton")
-        self.delete_button.clicked.connect(self.delete_reminder)
-        list_buttons_layout.addWidget(self.delete_button)
-        
-        left_layout.addLayout(list_buttons_layout)
-        content_layout.addWidget(left_panel)
-        
-        # 右侧 - 添加新提醒区域
-        right_panel = QFrame()
-        right_panel.setObjectName("rightPanel")
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(15)
-        
-        add_title = QLabel("添加新提醒")
-        add_title.setObjectName("sectionLabel")
-        right_layout.addWidget(add_title)
-        
-        # 添加新提醒表单
-        new_reminder_frame = QFrame()
-        new_reminder_frame.setObjectName("newReminderFrame")
-        new_reminder_layout = QVBoxLayout(new_reminder_frame)
-        new_reminder_layout.setContentsMargins(16, 16, 16, 16)
-        new_reminder_layout.setSpacing(15)
-        
-        form_layout = QFormLayout()
-        form_layout.setSpacing(12)
-        form_layout.setLabelAlignment(Qt.AlignRight)
-        form_layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
-        
-        # 时间编辑器
-        self.time_edit = QTimeEdit()
-        self.time_edit.setDisplayFormat("HH:mm")
-        self.time_edit.setTime(QTime.currentTime())
-        self.time_edit.setObjectName("timeEdit")
-        form_layout.addRow("提醒时间:", self.time_edit)
-        
-        # 持续时间调整
-        self.duration_spinbox = QSpinBox()
-        self.duration_spinbox.setRange(1, 60)
-        self.duration_spinbox.setValue(10)
-        self.duration_spinbox.setSuffix(" 秒")
-        self.duration_spinbox.setObjectName("durationSpinBox")
-        form_layout.addRow("显示时长:", self.duration_spinbox)
-        
-        # 添加声音设置复选框
-        self.sound_checkbox = QCheckBox("播放提醒声音")
-        self.sound_checkbox.setChecked(True)
-        self.sound_checkbox.setObjectName("soundCheckBox")
-        form_layout.addRow("声音设置:", self.sound_checkbox)
-        
-        # 星期选择组
-        weekday_group = QGroupBox("启用的星期")
-        weekday_group.setObjectName("weekdayGroup")
-        weekday_layout = QGridLayout(weekday_group)
-        weekday_layout.setSpacing(8)
-        weekday_layout.setContentsMargins(10, 5, 10, 5)
-        
-        # 创建星期复选框
-        weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-        self.weekday_checkboxes = []
-        
-        # 每行放置4个复选框，更紧凑
-        for i, name in enumerate(weekday_names):
-            row = i // 4
-            col = i % 4
-            checkbox = QCheckBox(name)
-            checkbox.setChecked(True)  # 默认选中
-            self.weekday_checkboxes.append(checkbox)
-            weekday_layout.addWidget(checkbox, row, col)
-        
-        form_layout.addRow("星期设置:", weekday_group)
-        
-        # 使用QTextEdit替换QLineEdit以支持多行输入
-        self.message_edit = QTextEdit()
-        self.message_edit.setPlaceholderText("输入提醒消息...\n可输入多行，每行将显示为单独的消息")
-        self.message_edit.setObjectName("messageEdit")
-        self.message_edit.setMinimumHeight(80)  # 设置最小高度
-        self.message_edit.setMaximumHeight(120)  # 设置最大高度
-        # 简化样式
-        self.message_edit.setStyleSheet("""
-            QTextEdit {
-                border: 1px solid #d1d1d1;
-                border-radius: 4px;
-                padding: 10px 10px 10px 12px;
-                background-color: white;
-                color: #333333;
-                font-size: 14px;
-                font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
-            }
-            QTextEdit:focus {
-                border-color: #0078d4;
-                border-left-width: 3px;
-            }
-        """)
-        form_layout.addRow("提醒消息:", self.message_edit)
-        
-        new_reminder_layout.addLayout(form_layout)
-        
-        # 添加和测试按钮
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(12)
-        button_layout.setContentsMargins(0, 10, 0, 0)
-        
-        # 左侧空白
-        button_layout.addStretch()
-        
-        self.add_button = QPushButton("添加提醒")
-        self.add_button.setObjectName("primaryButton")
-        self.add_button.clicked.connect(self.add_reminder)
-        button_layout.addWidget(self.add_button)
-        
-        self.test_button = QPushButton("测试提醒")
-        self.test_button.setObjectName("actionButton")
-        self.test_button.clicked.connect(self.test_reminder)
-        button_layout.addWidget(self.test_button)
-        
-        new_reminder_layout.addLayout(button_layout)
-        right_layout.addWidget(new_reminder_frame)
-        
-        # 开机自启动选项
-        auto_start_layout = QHBoxLayout()
-        auto_start_layout.setContentsMargins(5, 5, 5, 5)
-        
-        self.autostart_checkbox = QCheckBox("开机自动启动")
-        self.autostart_checkbox.setChecked(self.config_manager.get_setting("start_with_windows", False))
-        self.autostart_checkbox.stateChanged.connect(self.toggle_autostart)
-        auto_start_layout.addWidget(self.autostart_checkbox)
-        
-        auto_start_layout.addStretch()
-        right_layout.addLayout(auto_start_layout)
-        
-        content_layout.addWidget(right_panel)
-        
-        # 设置内容比例 (左:右 = 4:6)
-        content_layout.setStretch(0, 4)
-        content_layout.setStretch(1, 6)
-        
-        main_layout.addLayout(content_layout)
+        # 设置UI和托盘
+        self.ui_builder.setup_ui()
+        self.setup_tray()
         
         # 更新提醒列表
         self.update_reminder_list()
+        
+        # 确保初始自启动状态正确
+        if self.start_with_windows:
+            set_autostart(True)
+        self.update_autostart_status()
     
     def setup_tray(self):
         """设置系统托盘图标"""
         self.tray_icon = QSystemTrayIcon(self)
         
-        # 使用根目录的图标
         icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icon.ico")
         self.tray_icon.setIcon(QIcon(icon_path))
         
         # 创建托盘菜单
         tray_menu = QMenu()
+        tray_menu.setStyleSheet("""
+            QMenu {
+                background-color: white;
+                color: #202020;
+                border: 1px solid #e1e1e1;
+                padding: 4px;
+            }
+            QMenu::item {
+                padding: 6px 24px 6px 12px;
+                color: #202020;
+            }
+            QMenu::item:selected {
+                background-color: rgba(0, 103, 192, 0.08);
+                color: #0067C0;
+            }
+        """)
         
         show_action = QAction("显示窗口", self)
         show_action.triggered.connect(self.show_from_tray)
@@ -323,37 +146,9 @@ class MainWindow(QMainWindow):
         """更新提醒列表显示"""
         self.reminder_list.clear()
         
-        # 星期缩写
-        weekday_abbrs = ["一", "二", "三", "四", "五", "六", "日"]
-        
-        for reminder in self.reminders:
-            time_str = reminder["time"]
-            message = reminder["message"]
-            lines_count = message.count('\n') + 1
-            
-            # 在列表中只显示消息的第一行，如果有多行则添加行数信息
-            if "\n" in message:
-                first_line = message.split("\n")[0]
-                display_message = f"{first_line}... ({lines_count}行)"
-            else:
-                display_message = message
-            
-            duration = reminder["duration"]
-            
-            # 显示声音状态
-            sound_status = "有声音" if reminder.get("play_sound", True) else "静音"
-            
-            # 显示星期
-            weekdays = reminder.get("weekdays", [True] * 7)
-            weekday_str = ""
-            for i, enabled in enumerate(weekdays):
-                if enabled:
-                    weekday_str += weekday_abbrs[i]
-            
-            weekday_display = f"[{weekday_str}]" if weekday_str else "[无]"
-            
-            item = QListWidgetItem(f"{time_str} {weekday_display} - {display_message} ({duration}秒) [{sound_status}]")
-            self.reminder_list.addItem(item)
+        for reminder in self.reminder_manager.get_all_reminders():
+            display_text = self.reminder_manager.format_reminder_for_display(reminder)
+            self.reminder_list.addItem(display_text)
     
     def add_reminder(self):
         """添加新提醒"""
@@ -366,54 +161,42 @@ class MainWindow(QMainWindow):
         weekdays = [checkbox.isChecked() for checkbox in self.weekday_checkboxes]
         
         if not message:
-            QMessageBox.warning(self, "警告", "请输入提醒消息")
+            self.ui_builder.show_warning("警告", "请输入提醒消息")
             return
         
-        # 添加到提醒列表
-        reminder = {
-            "time": time_str,
-            "message": message,
-            "duration": int(duration),  # 确保duration是整数
-            "play_sound": play_sound,   # 添加声音设置
-            "weekdays": weekdays        # 添加星期设置
-        }
+        # 添加提醒
+        success, msg = self.reminder_manager.add_reminder(time_str, message, duration, play_sound, weekdays)
         
-        self.reminders.append(reminder)
-        
-        # 保存到配置
-        self.config_manager.save_reminders(self.reminders)
-        
-        # 更新UI
-        self.update_reminder_list()
-        self.message_edit.clear()
+        if success:
+            # 更新UI
+            self.update_reminder_list()
+            self.message_edit.clear()
+        else:
+            self.ui_builder.show_warning("添加失败", msg)
     
     def delete_reminder(self):
         """删除选中的提醒"""
         current_row = self.reminder_list.currentRow()
         if current_row >= 0:
             # 获取当前选中的提醒信息
-            reminder = self.reminders[current_row]
+            reminder = self.reminder_manager.get_reminder(current_row)
             time_str = reminder["time"]
             message = reminder["message"].split('\n')[0]  # 只显示第一行
             
             # 显示确认对话框
-            reply = QMessageBox.question(
-                self, 
+            reply = self.ui_builder.show_question(
                 "确认删除", 
-                f"确定要删除以下提醒吗？\n时间: {time_str}\n内容: {message}", 
-                QMessageBox.Yes | QMessageBox.No, 
-                QMessageBox.No
+                f"确定要删除以下提醒吗？\n时间: {time_str}\n内容: {message}"
             )
             
             if reply == QMessageBox.Yes:
-                del self.reminders[current_row]
-                self.config_manager.save_reminders(self.reminders)
-                self.update_reminder_list()
+                success, _ = self.reminder_manager.delete_reminder(current_row)
+                if success:
+                    self.update_reminder_list()
     
     def test_reminder(self):
         """测试提醒显示效果"""
         # 获取当前时间和测试消息
-        current_time = datetime.now().strftime("%H:%M")
         message = self.message_edit.toPlainText().strip()
         if not message:
             message = "测试提醒内容"
@@ -421,126 +204,69 @@ class MainWindow(QMainWindow):
         duration = self.duration_spinbox.value()
         play_sound = self.sound_checkbox.isChecked()
         
+        # 获取所有区域的壁纸
+        wallpapers = self.wallpaper_manager.get_all_wallpapers()
+        
         if self.reminder_screen:
             self.reminder_screen.close()
             self.reminder_screen = None
         
-        # 创建新的提醒屏幕对象，会在初始化时播放声音
-        self.reminder_screen = ReminderScreen(message, int(duration), play_sound)
+        # 创建新的提醒屏幕对象，传入所有区域的壁纸
+        self.reminder_screen = ReminderScreen(message, int(duration), play_sound, wallpapers)
         self.reminder_screen.show()
     
     def check_reminders(self):
         """检查是否有到期的提醒"""
-        current_time = datetime.now().strftime("%H:%M")
+        reminder = self.reminder_manager.check_reminders()
         
-        # 获取当前是星期几 (0是周一，6是周日)
-        current_weekday = datetime.now().weekday()
-        
-        # 防止同一分钟内重复触发提醒
-        if current_time == self.last_reminder_time:
-            return
-        
-        for reminder in self.reminders:
-            if reminder["time"] == current_time:
-                # 检查当前星期是否启用
-                weekdays = reminder.get("weekdays", [True] * 7)
-                if not weekdays[current_weekday]:
-                    # 当前星期未启用此提醒，跳过
-                    continue
-                
-                # 记录当前提醒时间，避免重复触发
-                self.last_reminder_time = current_time
-                
-                # 关闭现有提醒（如果有）
-                if self.reminder_screen:
-                    self.reminder_screen.close()
-                    self.reminder_screen = None
-                
-                # 确保duration是整数
-                duration = int(reminder.get("duration", 10))
-                message = reminder["message"]
-                play_sound = reminder.get("play_sound", True)  # 获取声音设置
-                
-                # 创建新的提醒屏幕，根据设置决定是否播放声音
-                self.reminder_screen = ReminderScreen(message, duration, play_sound)
-                self.reminder_screen.show()
-                
-                # 找到了匹配的提醒，退出循环
-                break
+        if reminder:
+            # 关闭现有提醒（如果有）
+            if self.reminder_screen:
+                self.reminder_screen.close()
+                self.reminder_screen = None
+            
+            # 确保duration是整数
+            duration = int(reminder.get("duration", 10))
+            message = reminder["message"]
+            play_sound = reminder.get("play_sound", True)  # 获取声音设置
+            
+            # 获取所有区域的壁纸
+            wallpapers = self.wallpaper_manager.get_all_wallpapers()
+            
+            # 创建新的提醒屏幕
+            self.reminder_screen = ReminderScreen(message, duration, play_sound, wallpapers)
+            self.reminder_screen.show()
     
     def update_autostart_status(self):
         """更新开机自启动状态"""
-        # 获取注册表自启动项路径
-        if sys.platform == 'win32':
-            try:
-                import winreg
-                # 打开注册表
-                key_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
-                # 尝试读取注册表值
-                try:
-                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
-                        value, _ = winreg.QueryValueEx(key, "ClassScreenReminder")
-                        exists = True
-                except FileNotFoundError:
-                    exists = False
-                
-                # 更新配置和UI
-                if exists != self.start_with_windows:
-                    self.start_with_windows = exists
-                    self.config_manager.set_setting("start_with_windows", exists)
-                    if hasattr(self, 'autostart_checkbox'):
-                        self.autostart_checkbox.setChecked(exists)
-            except Exception as e:
-                logger.error(f"更新自启动状态出错: {e}")
+        # 获取自启动状态
+        exists = get_autostart_status()
+        
+        # 更新配置和UI
+        if exists != self.start_with_windows:
+            self.start_with_windows = exists
+            self.config_manager.set_setting("start_with_windows", exists)
+            if hasattr(self, 'autostart_checkbox'):
+                self.autostart_checkbox.setChecked(exists)
     
     def toggle_autostart(self, state):
         """切换开机自启动状态"""
         enable = bool(state)
         
-        if sys.platform == 'win32':
-            try:
-                import winreg
-                # 获取应用程序路径
-                app_path = f'"{sys.executable}"'
-                if getattr(sys, 'frozen', False):
-                    # PyInstaller打包后的路径
-                    app_path = f'"{sys.executable}"'
-                else:
-                    # 开发环境路径
-                    main_script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py")
-                    app_path = f'"{sys.executable}" "{main_script}"'
-                
-                # 打开注册表
-                key_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
-                
-                if enable:
-                    # 添加到自启动
-                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_WRITE) as key:
-                        winreg.SetValueEx(key, "ClassScreenReminder", 0, winreg.REG_SZ, app_path)
-                else:
-                    # 从自启动中移除
-                    try:
-                        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_WRITE) as key:
-                            winreg.DeleteValue(key, "ClassScreenReminder")
-                    except FileNotFoundError:
-                        pass  # 如果键不存在，则不需要删除
-                
-                # 保存设置
-                self.start_with_windows = enable
-                self.config_manager.set_setting("start_with_windows", enable)
-                
-            except Exception as e:
-                logger.error(f"设置自启动出错: {e}")
-                QMessageBox.warning(self, "错误", f"设置开机自启动失败: {str(e)}")
-                # 恢复复选框状态
-                self.autostart_checkbox.setChecked(not enable)
-                return
+        if set_autostart(enable):
+            # 保存设置
+            self.start_with_windows = enable
+            self.config_manager.set_setting("start_with_windows", enable)
+        else:
+            self.ui_builder.show_warning("错误", "设置开机自启动失败")
+            # 恢复复选框状态
+            self.autostart_checkbox.setChecked(not enable)
     
     def edit_reminder(self):
         """编辑选中的提醒"""
         current_row = self.reminder_list.currentRow()
         if current_row >= 0:
-            reminder = self.reminders[current_row]
+            reminder = self.reminder_manager.get_reminder(current_row)
             
             # 设置界面值为当前选中的提醒
             self.time_edit.setTime(QTime.fromString(reminder["time"], "HH:mm"))
@@ -554,10 +280,120 @@ class MainWindow(QMainWindow):
                 checkbox.setChecked(weekdays[i] if i < len(weekdays) else True)
             
             # 删除当前提醒
-            del self.reminders[current_row]
-            # 更新界面
-            self.update_reminder_list()
-            
-            # 提示用户
-            QMessageBox.information(self, "编辑提醒", 
-                                 "已加载选中的提醒到编辑区域，\n修改后点击「添加提醒」按钮保存。")
+            success, _ = self.reminder_manager.delete_reminder(current_row)
+            if success:
+                # 更新界面
+                self.update_reminder_list()
+                
+                # 提示用户
+                self.ui_builder.show_message("编辑提醒", 
+                                     "已加载选中的提醒到编辑区域，\n修改后点击「添加提醒」按钮保存。")
+    
+    def select_wallpaper(self):
+        """选择壁纸"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择背景图片",
+            "",
+            "图片文件 (*.jpg *.jpeg *.png *.bmp *.tiff)"
+        )
+        
+        if file_path:
+            # 更新配置
+            self.reminder_manager.set_wallpaper_path(file_path)
+            self.ui_builder.show_message("设置成功", "背景图片已设置，将在下次提醒时显示。")
+    
+    def clear_wallpaper(self):
+        """清除壁纸"""
+        self.reminder_manager.set_wallpaper_path("")
+        self.ui_builder.show_message("设置成功", "背景图片已清除，将在下次提醒时恢复默认背景。")
+    
+    def on_area_changed(self, index):
+        """区域选择变化时更新显示"""
+        area = self.area_combo.currentData()
+        self.update_wallpaper_preview(area)
+    
+    def update_wallpaper_preview(self, area):
+        """更新壁纸预览显示"""
+        path = self.wallpaper_manager.get_wallpaper(area)
+        if path and os.path.exists(path):
+            pixmap = QPixmap(path)
+            if not pixmap.isNull():
+                pixmap = pixmap.scaled(300, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                self.wallpaper_preview.setPixmap(pixmap)
+                self.path_label.setText(path)
+                return
+        
+        # 没有设置壁纸或加载失败
+        self.wallpaper_preview.setText("无背景图片")
+        self.wallpaper_preview.setPixmap(QPixmap())
+        self.path_label.setText("未选择图片")
+    
+    def select_area_wallpaper(self):
+        """为当前选择的区域选择壁纸"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择背景图片",
+            "",
+            "图片文件 (*.jpg *.jpeg *.png *.bmp *.tiff)"
+        )
+        
+        if file_path:
+            area = self.area_combo.currentData()
+            if self.wallpaper_manager.set_wallpaper(area, file_path):
+                self.update_wallpaper_preview(area)
+                self.ui_builder.show_message("设置成功", f"已为 {self.area_combo.currentText()} 设置背景图片")
+            else:
+                self.ui_builder.show_warning("设置失败", "无法设置背景图片，请确认文件存在且可访问")
+    
+    def clear_area_wallpaper(self):
+        """清除当前选择区域的壁纸"""
+        area = self.area_combo.currentData()
+        self.wallpaper_manager.clear_wallpaper(area)
+        self.update_wallpaper_preview(area)
+        self.ui_builder.show_message("操作成功", f"已清除 {self.area_combo.currentText()} 的背景图片")
+    
+    def clear_all_wallpapers(self):
+        """清除所有区域的壁纸"""
+        reply = self.ui_builder.show_question(
+            "确认操作", 
+            "确定要清除所有区域的背景图片吗？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            self.wallpaper_manager.clear_wallpaper()
+            area = self.area_combo.currentData()
+            self.update_wallpaper_preview(area)
+            self.ui_builder.show_message("操作成功", "已清除所有区域的背景图片")
+    
+    def on_menu_changed(self, menu_id):
+        """处理菜单切换事件"""
+        if menu_id in self.ui_builder.content_pages:
+            self.content_stack.setCurrentIndex(self.ui_builder.content_pages[menu_id])
+    
+    def on_startup_minimized_changed(self, checked):
+        """处理启动时最小化设置变更"""
+        self.config_manager.set_startup_minimized(checked)
+    
+    def reset_form(self):
+        """重置表单内容"""
+        # 时间设为当前时间
+        self.time_edit.setTime(QTime.currentTime())
+        
+        # 持续时间设为默认值
+        self.duration_spinbox.setValue(10)
+        
+        # 声音设置为默认值
+        self.sound_checkbox.setChecked(True)
+        
+        # 所有星期都选中
+        for checkbox in self.weekday_checkboxes:
+            checkbox.setChecked(True)
+        
+        # 清空消息内容
+        self.message_edit.clear()
+        
+        # 提示用户
+        self.ui_builder.show_message("操作完成", "表单已重置为默认值")

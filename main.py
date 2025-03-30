@@ -1,7 +1,7 @@
 import sys
 import os
 import logging
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import QFile, QTextStream, Qt
 
@@ -11,9 +11,10 @@ src_dir = os.path.join(current_dir, "src")
 if src_dir not in sys.path:
     sys.path.append(src_dir)
 
+# 使用新的导入路径
 from src.main_window import MainWindow
 from src.config_manager import ConfigManager
-from src.reminder_screen import initialize_sound
+from src.utils.sound_manager import initialize_sound
 
 # 配置日志记录
 log_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~/.config')), 'ClassScreenReminder')
@@ -48,7 +49,26 @@ def check_single_instance():
             return True
     return True
 
-if __name__ == "__main__":
+def create_default_resources():
+    """创建默认资源"""
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    resources_dir = os.path.join(app_dir, "resources")
+    os.makedirs(resources_dir, exist_ok=True)
+    
+    # 检查声音文件是否存在
+    sound_file = os.path.join(resources_dir, "attend_class.wav")
+    if not os.path.exists(sound_file):
+        # 记录日志
+        logging.warning(f"声音文件未找到: {sound_file}")
+        
+        # 创建一个提示文件，告知用户需要添加声音文件
+        readme_file = os.path.join(resources_dir, "README.txt")
+        if not os.path.exists(readme_file):
+            with open(readme_file, "w", encoding="utf-8") as f:
+                f.write("请在此目录放置名为 'attend_class.wav' 的声音文件，作为提醒声音。\n")
+                f.write("可以使用任何WAV格式的短音效。\n")
+
+def main():
     # 检查是否已有实例在运行
     if not check_single_instance():
         sys.exit(0)
@@ -59,6 +79,9 @@ if __name__ == "__main__":
     
     # 应用根目录
     app_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # 确保资源目录和必要文件存在
+    create_default_resources()
     
     # 设置应用图标
     icon_path = os.path.join(app_dir, "icon.ico")
@@ -74,18 +97,31 @@ if __name__ == "__main__":
     os.makedirs(resources_dir, exist_ok=True)
     
     style_path = os.path.join(resources_dir, "style.qss")
-    if os.path.exists(style_path):
-        app.setStyleSheet(load_stylesheet(style_path))
+    
+    app.setStyleSheet(load_stylesheet(style_path))
     
     # 静默加载声音资源
-    initialize_sound()
+    sound_initialized = initialize_sound()
+    if not sound_initialized:
+        # 显示提示对话框
+        QMessageBox.warning(
+            None, 
+            "声音资源缺失", 
+            "未找到声音文件 'attend_class.wav'。\n\n"
+            "请在 resources 目录中放置此文件，以启用提醒声音功能。\n"
+            "程序将继续运行，但没有声音提醒。"
+        )
     
     # 初始化配置管理器并创建主窗口
     config_manager = ConfigManager()
     main_window = MainWindow(config_manager)
     
-    # 默认不显示主窗口，仅在托盘中显示
-    # main_window.show()
+    # 如果设置了启动时最小化，则不显示主窗口
+    if not config_manager.get_startup_minimized():
+        main_window.show()
     
     # 运行应用
     sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()

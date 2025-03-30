@@ -10,18 +10,27 @@ from PySide6.QtGui import QGuiApplication, QColor
 # 处理导入问题 - 支持直接运行此文件和作为包的一部分导入
 try:
     # 尝试相对导入 (当作为包的一部分导入时)
-    from .sound_manager import play_initial_sound, initialize_sound, _is_second_sound_playing
+    from ..utils.sound_manager import play_initial_sound, initialize_sound, _is_second_sound_playing
     from .ui_components import ColorBlock, LightEffectBlock
 except ImportError:
     # 尝试绝对导入 (当直接运行此文件时)
     try:
-        # 确保src目录在路径中
+        # 确保正确的导入路径
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        if current_dir not in sys.path:
-            sys.path.append(current_dir)
+        components_dir = current_dir
+        src_dir = os.path.dirname(components_dir)
+        root_dir = os.path.dirname(src_dir)
         
-        from sound_manager import play_initial_sound, initialize_sound, _is_second_sound_playing
-        from ui_components import ColorBlock, LightEffectBlock
+        if components_dir not in sys.path:
+            sys.path.append(components_dir)
+        if src_dir not in sys.path:
+            sys.path.append(src_dir)
+        if root_dir not in sys.path:
+            sys.path.append(root_dir)
+        
+        # 调整导入路径以适应新的目录结构
+        from src.utils.sound_manager import play_initial_sound, initialize_sound, _is_second_sound_playing
+        from src.components.ui_components import ColorBlock, LightEffectBlock
     except ImportError as e:
         print(f"导入错误: {e}")
         sys.exit(1)
@@ -32,15 +41,20 @@ logger = logging.getLogger("ClassScreenReminder.ReminderScreen")
 class ReminderScreen(QWidget):
     """全屏提醒窗口类"""
     
-    def __init__(self, message, duration=10, play_sound=True):
+    def __init__(self, message, duration=10, play_sound=True, wallpapers=None):
         super().__init__()
+        self.message = message
+        self.play_sound = play_sound  # 保存声音设置
+        self.wallpapers = wallpapers or {}  # 保存壁纸设置，字典格式 {区域: 路径}
         
         # 根据设置决定是否播放声音
         if play_sound:
-            play_initial_sound()
-        
-        self.message = message
-        self.play_sound = play_sound  # 保存声音设置
+            # 确保声音初始化成功
+            if not initialize_sound():
+                logger.warning("声音初始化失败，将禁用声音提醒")
+                self.play_sound = False
+            else:
+                play_initial_sound()
         
         # 确保duration是整数并且大于0
         try:
@@ -79,6 +93,9 @@ class ReminderScreen(QWidget):
         if not self.play_sound:  # 如果禁用声音，直接返回
             return
         
+        # 引用全局变量
+        global _is_second_sound_playing
+        # 直接使用已导入的函数，而不是重新导入
         if not _is_second_sound_playing:
             play_initial_sound()
     
@@ -95,26 +112,58 @@ class ReminderScreen(QWidget):
         # 计算色块A的宽度
         self.block_a_width = screen_size.width() // 5
         
-        # 创建背景模糊遮罩层
+        # 创建背景模糊遮罩层 - 不设置壁纸，只作为整体背景
         self.backdrop = ColorBlock("rgba(0, 25, 50, 0.2)", self, radius=0, opacity=0.2)
         self.backdrop.setGeometry(0, 0, 0, screen_size.height())
         
-        # 创建色块B（底层，深蓝色，带圆角）
-        self.block_b = ColorBlock("#0B5394", self, radius=5, opacity=0.95)  # 高级蓝
+        # 创建色块B（底层，深蓝色，带圆角）- 对应主背景区域
+        opacity_b = 0.85
+        self.block_b = ColorBlock("#0B5394", self, radius=5, opacity=opacity_b)  # 高级蓝
         self.block_b.setGeometry(0, 0, 0, screen_size.height())  # 初始宽度为0
         
+        # 如果有主区域壁纸，设置背景图片
+        if "main" in self.wallpapers and os.path.exists(self.wallpapers["main"]):
+            self.block_b.set_background_image(self.wallpapers["main"])
+            # 当设置了壁纸时稍微增加透明度，让壁纸更明显
+            self.block_b.color.setAlphaF(0.7)
+        
         # 创建色块A（左侧五分之一，上层，更深的蓝色，带圆角）
-        self.block_a = ColorBlock("#073763", self, radius=5, opacity=0.95)  # 深蓝色
-        self.block_a.setGeometry(0, 0, self.block_a_width, 0)  # 初始高度为0
+        opacity_a = 0.95
+        self.block_a = ColorBlock("#073763", self, radius=5, opacity=opacity_a)
+        
+        # 如果有左侧区域壁纸，设置背景图片
+        if "left" in self.wallpapers and os.path.exists(self.wallpapers["left"]):
+            self.block_a.set_background_image(self.wallpapers["left"])
+            # 当设置了壁纸时稍微增加透明度
+            self.block_a.color.setAlphaF(0.7)
+        
+        # 设置几何尺寸，初始高度为0用于动画效果
+        self.block_a.setGeometry(0, 0, self.block_a_width, 0)
         self.block_a.raise_()  # 确保色块A位于上层
         
         # 创建色块C（中间层，湖蓝色，带圆角）
-        self.block_c = ColorBlock("#8EACCD", self, radius=5, opacity=0.90)  # 湖蓝色
+        opacity_c = 0.90
+        self.block_c = ColorBlock("#8EACCD", self, radius=5, opacity=opacity_c)  # 湖蓝色
         self.block_c.setGeometry(screen_size.width(), 0, 0, screen_size.height() // 2)  # 初始宽度为0
+        
+        # 如果有中间区域壁纸，设置背景图片
+        if "top" in self.wallpapers and os.path.exists(self.wallpapers["top"]):
+            self.block_c.set_background_image(self.wallpapers["top"])
+            # 当设置了壁纸时稍微增加透明度
+            self.block_c.color.setAlphaF(0.7)
+        
         self.block_c.stackUnder(self.block_a)  # 确保色块C在A下B上
         
         # 创建装饰条 - 亮蓝色
-        self.accent_line = LightEffectBlock("#4FC3F7", self, radius=4, opacity=0.9)  # 亮蓝色
+        opacity_accent = 0.9
+        self.accent_line = LightEffectBlock("#4FC3F7", self, radius=4, opacity=opacity_accent)  # 亮蓝色
+        
+        # 如果有装饰区域壁纸，设置背景图片
+        if "accent" in self.wallpapers and os.path.exists(self.wallpapers["accent"]):
+            self.accent_line.set_background_image(self.wallpapers["accent"])
+            # 当设置了壁纸时稍微增加透明度
+            self.accent_line.color.setAlphaF(0.7)
+        
         self.accent_line.setGeometry(screen_size.width(), screen_size.height() // 2 - 7, 0, 14)
         self.accent_line.raise_()
         
@@ -157,7 +206,10 @@ class ReminderScreen(QWidget):
         # 创建一个透明容器用于放置消息
         self.message_container = QFrame(self.block_b)
         self.message_container.setGeometry(message_x, message_y, message_width, message_height)
-        self.message_container.setStyleSheet("background-color: transparent; border: none;")
+        self.message_container.setStyleSheet("""
+            background-color: transparent;
+            border: none;
+        """)
         
         # 为消息容器创建垂直布局
         message_layout = QVBoxLayout(self.message_container)
@@ -214,23 +266,6 @@ class ReminderScreen(QWidget):
         """开始入场动画"""
         screen_size = QGuiApplication.primaryScreen().size()
         
-        # 设置动画
-        self._setup_enter_animations(screen_size)
-        
-        # 设置最后一个动画完成时的回调，标记入场动画完成
-        self.enter_animations['accent'].finished.connect(self.on_enter_animations_finished)
-        
-        # 启动动画序列
-        self.enter_animations['backdrop'].start()  # 先启动背景
-        
-        # 使用错位效果启动其他动画
-        QTimer.singleShot(150, lambda: self.enter_animations['a'].start())
-        QTimer.singleShot(350, lambda: self.enter_animations['b'].start())
-        QTimer.singleShot(600, lambda: self.enter_animations['c'].start())
-        QTimer.singleShot(800, lambda: self.enter_animations['accent'].start())
-    
-    def _setup_enter_animations(self, screen_size):
-        """设置入场动画"""
         # 背景模糊层淡入
         anim_backdrop = QPropertyAnimation(self.backdrop, b"geometry")
         anim_backdrop.setDuration(800)
@@ -274,6 +309,18 @@ class ReminderScreen(QWidget):
             'c': anim_c,
             'accent': anim_accent
         }
+        
+        # 设置最后一个动画完成时的回调，标记入场动画完成
+        anim_accent.finished.connect(self.on_enter_animations_finished)
+        
+        # 启动动画序列
+        anim_backdrop.start()  # 先启动背景
+        
+        # 使用错位效果启动其他动画
+        QTimer.singleShot(150, lambda: self.enter_animations['a'].start())
+        QTimer.singleShot(350, lambda: self.enter_animations['b'].start())
+        QTimer.singleShot(600, lambda: self.enter_animations['c'].start())
+        QTimer.singleShot(800, lambda: self.enter_animations['accent'].start())
     
     def on_enter_animations_finished(self):
         """入场动画完成时的回调"""
@@ -299,21 +346,6 @@ class ReminderScreen(QWidget):
         
         screen_size = QGuiApplication.primaryScreen().size()
         
-        # 设置退场动画
-        self._setup_exit_animations(screen_size)
-        
-        # 设置最后一个动画结束时关闭窗口
-        self.exit_animations['backdrop'].finished.connect(self.close)
-        
-        # 开始退出动画序列
-        self.exit_animations['accent'].start()  # 先启动装饰条退出
-        QTimer.singleShot(200, lambda: self.exit_animations['c'].start())
-        QTimer.singleShot(400, lambda: self.exit_animations['a'].start())
-        QTimer.singleShot(600, lambda: self.exit_animations['b'].start())
-        QTimer.singleShot(800, lambda: self.exit_animations['backdrop'].start())
-    
-    def _setup_exit_animations(self, screen_size):
-        """设置退场动画"""
         # 色块C从当前位置收缩回屏幕右侧
         anim_c = QPropertyAnimation(self.block_c, b"geometry")
         anim_c.setDuration(800)
@@ -357,6 +389,16 @@ class ReminderScreen(QWidget):
             'b': anim_b,
             'backdrop': anim_backdrop
         }
+        
+        # 设置最后一个动画结束时关闭窗口
+        anim_backdrop.finished.connect(self.close)
+        
+        # 开始退出动画序列
+        anim_accent.start()  # 先启动装饰条退出
+        QTimer.singleShot(200, lambda: self.exit_animations['c'].start())
+        QTimer.singleShot(400, lambda: self.exit_animations['a'].start())
+        QTimer.singleShot(600, lambda: self.exit_animations['b'].start())
+        QTimer.singleShot(800, lambda: self.exit_animations['backdrop'].start())
     
     def check_and_start_close(self):
         """检查入场动画是否完成，然后开始退场动画"""

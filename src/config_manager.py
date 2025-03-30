@@ -39,8 +39,13 @@ class ConfigManager:
         default_config = {
             "reminders": [],
             "settings": {
-                "start_with_windows": False,
-                "minimize_to_tray": True
+                "start_with_windows": True,  # 默认开机自启动
+                "minimize_to_tray": True,    # 默认关闭时最小化到托盘
+                "startup_minimized": True,   # 默认启动时最小化
+                "wallpaper_path": "",        # 保留旧版本兼容性
+                "wallpapers": {},            # 新增多区域壁纸设置
+                "theme": "light",            # 新增主题设置: light或dark
+                "accent_color": "#0067C0"    # 强调色
             }
         }
         
@@ -105,6 +110,49 @@ class ConfigManager:
             config["settings"] = {}
         config["settings"][key] = value
         self.save_config(config)
+    
+    def get_wallpaper_path(self):
+        """获取壁纸路径"""
+        return self.get_setting("wallpaper_path", "")
+    
+    def set_wallpaper_path(self, path):
+        """设置壁纸路径"""
+        self.set_setting("wallpaper_path", path)
+    
+    def get_startup_minimized(self):
+        """获取是否启动时最小化到系统托盘的设置"""
+        return self.get_setting("startup_minimized", False)
+    
+    def set_startup_minimized(self, value):
+        """设置是否启动时最小化到系统托盘"""
+        self.set_setting("startup_minimized", bool(value))
+    
+    def get_minimize_to_tray(self):
+        """获取关闭窗口时是否最小化到系统托盘的设置"""
+        return True  # 始终返回True，强制关闭时最小化到托盘
+    
+    def set_minimize_to_tray(self, value):
+        """设置关闭窗口时是否最小化到系统托盘"""
+        self.set_setting("minimize_to_tray", bool(value))
+    
+    def get_theme(self):
+        """获取当前主题设置"""
+        return self.get_setting("theme", "light")
+    
+    def set_theme(self, theme):
+        """设置主题"""
+        if theme in ["light", "dark"]:
+            self.set_setting("theme", theme)
+            return True
+        return False
+    
+    def get_accent_color(self):
+        """获取强调色"""
+        return self.get_setting("accent_color", "#0067C0")
+    
+    def set_accent_color(self, color):
+        """设置强调色"""
+        self.set_setting("accent_color", color)
 
 # 添加测试代码，便于直接运行此文件
 if __name__ == "__main__":
