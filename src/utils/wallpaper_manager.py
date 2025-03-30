@@ -21,13 +21,6 @@ class WallpaperManager(QObject):
     def _load_wallpapers(self):
         """从配置中加载壁纸设置"""
         wallpapers = self.config_manager.get_setting("wallpapers", {})
-        if not isinstance(wallpapers, dict):
-            # 兼容旧版本的单壁纸设置
-            old_path = self.config_manager.get_setting("wallpaper_path", "")
-            if old_path:
-                wallpapers = {self.AREA_MAIN: old_path}
-            else:
-                wallpapers = {}
         return wallpapers
     
     def get_wallpaper(self, area=AREA_MAIN):

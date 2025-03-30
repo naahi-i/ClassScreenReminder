@@ -11,10 +11,10 @@ src_dir = os.path.join(current_dir, "src")
 if src_dir not in sys.path:
     sys.path.append(src_dir)
 
-# 使用新的导入路径
 from src.main_window import MainWindow
 from src.config_manager import ConfigManager
 from src.utils.sound_manager import initialize_sound
+from src.utils.resource_manager import init_resource_paths, get_resource_path, create_default_resources, get_icon_path
 
 # 配置日志记录
 log_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~/.config')), 'ClassScreenReminder')
@@ -49,25 +49,6 @@ def check_single_instance():
             return True
     return True
 
-def create_default_resources():
-    """创建默认资源"""
-    app_dir = os.path.dirname(os.path.abspath(__file__))
-    resources_dir = os.path.join(app_dir, "resources")
-    os.makedirs(resources_dir, exist_ok=True)
-    
-    # 检查声音文件是否存在
-    sound_file = os.path.join(resources_dir, "attend_class.wav")
-    if not os.path.exists(sound_file):
-        # 记录日志
-        logging.warning(f"声音文件未找到: {sound_file}")
-        
-        # 创建一个提示文件，告知用户需要添加声音文件
-        readme_file = os.path.join(resources_dir, "README.txt")
-        if not os.path.exists(readme_file):
-            with open(readme_file, "w", encoding="utf-8") as f:
-                f.write("请在此目录放置名为 'attend_class.wav' 的声音文件，作为提醒声音。\n")
-                f.write("可以使用任何WAV格式的短音效。\n")
-
 def main():
     # 检查是否已有实例在运行
     if not check_single_instance():
@@ -77,27 +58,24 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("ClassScreenReminder")
     
-    # 应用根目录
+    # 初始化资源路径
     app_dir = os.path.dirname(os.path.abspath(__file__))
+    init_resource_paths(app_dir)
     
     # 确保资源目录和必要文件存在
     create_default_resources()
     
     # 设置应用图标
-    icon_path = os.path.join(app_dir, "icon.ico")
-    if os.path.exists(icon_path):
+    icon_path = get_icon_path()
+    if icon_path:
         app.setWindowIcon(QIcon(icon_path))
     
     # 设置高DPI缩放
     app.setAttribute(Qt.AA_UseHighDpiPixmaps)
     app.setAttribute(Qt.AA_EnableHighDpiScaling)
     
-    # 确保资源目录存在并加载样式表
-    resources_dir = os.path.join(app_dir, "resources")
-    os.makedirs(resources_dir, exist_ok=True)
-    
-    style_path = os.path.join(resources_dir, "style.qss")
-    
+    # 加载样式表
+    style_path = get_resource_path("style.qss")
     app.setStyleSheet(load_stylesheet(style_path))
     
     # 静默加载声音资源

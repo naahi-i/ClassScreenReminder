@@ -2,15 +2,19 @@ import os
 import sys
 import logging
 from datetime import datetime
-from PySide6.QtWidgets import QMainWindow, QSystemTrayIcon, QMenu, QMessageBox, QApplication, QFileDialog
-from PySide6.QtCore import Qt, QTime, QTimer, QEvent, QObject, QSize, Slot, QUrl
-from PySide6.QtGui import QIcon, QAction, QCloseEvent, QPixmap
+from PySide6.QtWidgets import QMainWindow, QApplication
+from PySide6.QtCore import Qt, QTimer, QEvent
+from PySide6.QtGui import QCloseEvent
 
 # 修改导入方式以支持新的目录结构
 try:
     # 包内导入
     from .components.reminder_screen import ReminderScreen
     from .components.ui_builder import MainWindowUI
+    from .components.ui.audio_manager_ui import AudioManagerUI
+    from .components.ui.wallpaper_manager_ui import WallpaperManagerUI
+    from .components.ui.tray_manager import TrayManager
+    from .components.ui.reminder_manager_ui import ReminderManagerUI
     from .utils.reminder_manager import ReminderManager
     from .utils.autostart_manager import get_autostart_status, set_autostart
     from .config_manager import ConfigManager
@@ -29,6 +33,10 @@ except ImportError:
         # 尝试从绝对路径导入
         from src.components.reminder_screen import ReminderScreen
         from src.components.ui_builder import MainWindowUI
+        from src.components.ui.audio_manager_ui import AudioManagerUI
+        from src.components.ui.wallpaper_manager_ui import WallpaperManagerUI
+        from src.components.ui.tray_manager import TrayManager
+        from src.components.ui.reminder_manager_ui import ReminderManagerUI
         from src.utils.reminder_manager import ReminderManager
         from src.utils.autostart_manager import get_autostart_status, set_autostart
         from src.config_manager import ConfigManager
@@ -47,17 +55,21 @@ class MainWindow(QMainWindow):
         super().__init__()  # 使用默认窗口风格，保留Windows动画
         self.config_manager = config_manager
         
-        # 初始化提醒管理器
+        # 初始化各管理器
         self.reminder_manager = ReminderManager(config_manager)
-        
-        # 初始化UI构建器
-        self.ui_builder = MainWindowUI(self)
-        
-        # 初始化壁纸管理器
         self.wallpaper_manager = WallpaperManager(config_manager)
         
         # 当前显示的提醒屏幕
         self.reminder_screen = None
+        
+        # 初始化UI构建器
+        self.ui_builder = MainWindowUI(self)
+        
+        # 初始化各UI组件管理器
+        self.tray_manager = TrayManager(self)
+        self.audio_manager_ui = AudioManagerUI(self)
+        self.wallpaper_manager_ui = WallpaperManagerUI(self)
+        self.reminder_manager_ui = ReminderManagerUI(self)
         
         # 设置检查提醒的定时器
         self.timer = QTimer(self)
@@ -69,12 +81,11 @@ class MainWindow(QMainWindow):
         self.start_with_windows = self.config_manager.get_setting("start_with_windows", True)  # 默认True
         self.startup_minimized = self.config_manager.get_startup_minimized()
         
-        # 设置UI和托盘
+        # 设置UI
         self.ui_builder.setup_ui()
-        self.setup_tray()
         
         # 更新提醒列表
-        self.update_reminder_list()
+        self.reminder_manager_ui.update_reminder_list()
         
         # 确保初始自启动状态正确
         if self.start_with_windows:
@@ -82,141 +93,15 @@ class MainWindow(QMainWindow):
         self.update_autostart_status()
         
         # 更新音频路径显示
-        self.update_audio_path_display()
-    
-    def setup_tray(self):
-        """设置系统托盘图标"""
-        self.tray_icon = QSystemTrayIcon(self)
-        
-        icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icon.ico")
-        self.tray_icon.setIcon(QIcon(icon_path))
-        
-        # 创建托盘菜单
-        tray_menu = QMenu()
-        tray_menu.setStyleSheet("""
-            QMenu {
-                background-color: white;
-                color: #202020;
-                border: 1px solid #e1e1e1;
-                padding: 4px;
-            }
-            QMenu::item {
-                padding: 6px 24px 6px 12px;
-                color: #202020;
-            }
-            QMenu::item:selected {
-                background-color: rgba(0, 103, 192, 0.08);
-                color: #0067C0;
-            }
-        """)
-        
-        show_action = QAction("显示窗口", self)
-        show_action.triggered.connect(self.show_from_tray)
-        tray_menu.addAction(show_action)
-        
-        exit_action = QAction("退出", self)
-        exit_action.triggered.connect(self.close_application)
-        tray_menu.addAction(exit_action)
-        
-        self.tray_icon.setContextMenu(tray_menu)
-        self.tray_icon.activated.connect(self.tray_icon_activated)
-        self.tray_icon.show()
+        self.audio_manager_ui.update_audio_path_display()
     
     def closeEvent(self, event: QCloseEvent):
         """最小化到托盘"""
-        if self.minimize_to_tray and self.tray_icon.isVisible():
+        if self.minimize_to_tray and self.tray_manager.is_visible():
             self.hide()
             event.ignore()
         else:
             event.accept()
-    
-    def close_application(self):
-        """彻底关闭应用"""
-        self.tray_icon.hide()
-        QApplication.quit()
-        
-    def show_from_tray(self):
-        """从托盘显示窗口"""
-        self.showNormal()
-        self.activateWindow()  # 在Windows上激活窗口并设置焦点
-    
-    def tray_icon_activated(self, reason):
-        """处理托盘图标点击事件"""
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            self.show_from_tray()
-    
-    def update_reminder_list(self):
-        """更新提醒列表显示"""
-        self.reminder_list.clear()
-        
-        for reminder in self.reminder_manager.get_all_reminders():
-            display_text = self.reminder_manager.format_reminder_for_display(reminder)
-            self.reminder_list.addItem(display_text)
-    
-    def add_reminder(self):
-        """添加新提醒"""
-        time_str = self.time_edit.time().toString("HH:mm")
-        message = self.message_edit.toPlainText().strip()
-        duration = self.duration_spinbox.value()
-        play_sound = self.sound_checkbox.isChecked()
-        
-        # 获取选中的星期
-        weekdays = [checkbox.isChecked() for checkbox in self.weekday_checkboxes]
-        
-        if not message:
-            self.ui_builder.show_warning("警告", "请输入提醒消息")
-            return
-        
-        # 添加提醒
-        success, msg = self.reminder_manager.add_reminder(time_str, message, duration, play_sound, weekdays)
-        
-        if success:
-            # 更新UI
-            self.update_reminder_list()
-            self.message_edit.clear()
-        else:
-            self.ui_builder.show_warning("添加失败", msg)
-    
-    def delete_reminder(self):
-        """删除选中的提醒"""
-        current_row = self.reminder_list.currentRow()
-        if current_row >= 0:
-            # 获取当前选中的提醒信息
-            reminder = self.reminder_manager.get_reminder(current_row)
-            time_str = reminder["time"]
-            message = reminder["message"].split('\n')[0]  # 只显示第一行
-            
-            # 显示确认对话框
-            reply = self.ui_builder.show_question(
-                "确认删除", 
-                f"确定要删除以下提醒吗？\n时间: {time_str}\n内容: {message}"
-            )
-            
-            if reply == QMessageBox.Yes:
-                success, _ = self.reminder_manager.delete_reminder(current_row)
-                if success:
-                    self.update_reminder_list()
-    
-    def test_reminder(self):
-        """测试提醒显示效果"""
-        # 获取当前时间和测试消息
-        message = self.message_edit.toPlainText().strip()
-        if not message:
-            message = "测试提醒内容"
-        
-        duration = self.duration_spinbox.value()
-        play_sound = self.sound_checkbox.isChecked()
-        
-        # 获取所有区域的壁纸
-        wallpapers = self.wallpaper_manager.get_all_wallpapers()
-        
-        if self.reminder_screen:
-            self.reminder_screen.close()
-            self.reminder_screen = None
-        
-        # 创建新的提醒屏幕对象，传入所有区域的壁纸
-        self.reminder_screen = ReminderScreen(message, int(duration), play_sound, wallpapers)
-        self.reminder_screen.show()
     
     def check_reminders(self):
         """检查是否有到期的提醒"""
@@ -265,112 +150,6 @@ class MainWindow(QMainWindow):
             # 恢复复选框状态
             self.autostart_checkbox.setChecked(not enable)
     
-    def edit_reminder(self):
-        """编辑选中的提醒"""
-        current_row = self.reminder_list.currentRow()
-        if current_row >= 0:
-            reminder = self.reminder_manager.get_reminder(current_row)
-            
-            # 设置界面值为当前选中的提醒
-            self.time_edit.setTime(QTime.fromString(reminder["time"], "HH:mm"))
-            self.message_edit.setText(reminder["message"])
-            self.duration_spinbox.setValue(reminder["duration"])
-            self.sound_checkbox.setChecked(reminder.get("play_sound", True))
-            
-            # 设置星期复选框
-            weekdays = reminder.get("weekdays", [True] * 7)
-            for i, checkbox in enumerate(self.weekday_checkboxes):
-                checkbox.setChecked(weekdays[i] if i < len(weekdays) else True)
-            
-            # 删除当前提醒
-            success, _ = self.reminder_manager.delete_reminder(current_row)
-            if success:
-                # 更新界面
-                self.update_reminder_list()
-                
-                # 提示用户
-                self.ui_builder.show_message("编辑提醒", 
-                                     "已加载选中的提醒到编辑区域，\n修改后点击「添加提醒」按钮保存。")
-    
-    def select_wallpaper(self):
-        """选择壁纸"""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "选择背景图片",
-            "",
-            "图片文件 (*.jpg *.jpeg *.png *.bmp *.tiff)"
-        )
-        
-        if file_path:
-            # 更新配置
-            self.reminder_manager.set_wallpaper_path(file_path)
-            self.ui_builder.show_message("设置成功", "背景图片已设置，将在下次提醒时显示。")
-    
-    def clear_wallpaper(self):
-        """清除壁纸"""
-        self.reminder_manager.set_wallpaper_path("")
-        self.ui_builder.show_message("设置成功", "背景图片已清除，将在下次提醒时恢复默认背景。")
-    
-    def on_area_changed(self, index):
-        """区域选择变化时更新显示"""
-        area = self.area_combo.currentData()
-        self.update_wallpaper_preview(area)
-    
-    def update_wallpaper_preview(self, area):
-        """更新壁纸预览显示"""
-        path = self.wallpaper_manager.get_wallpaper(area)
-        if path and os.path.exists(path):
-            pixmap = QPixmap(path)
-            if not pixmap.isNull():
-                pixmap = pixmap.scaled(300, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                self.wallpaper_preview.setPixmap(pixmap)
-                self.path_label.setText(path)
-                return
-        
-        # 没有设置壁纸或加载失败
-        self.wallpaper_preview.setText("无背景图片")
-        self.wallpaper_preview.setPixmap(QPixmap())
-        self.path_label.setText("未选择图片")
-    
-    def select_area_wallpaper(self):
-        """为当前选择的区域选择壁纸"""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "选择背景图片",
-            "",
-            "图片文件 (*.jpg *.jpeg *.png *.bmp *.tiff)"
-        )
-        
-        if file_path:
-            area = self.area_combo.currentData()
-            if self.wallpaper_manager.set_wallpaper(area, file_path):
-                self.update_wallpaper_preview(area)
-                self.ui_builder.show_message("设置成功", f"已为 {self.area_combo.currentText()} 设置背景图片")
-            else:
-                self.ui_builder.show_warning("设置失败", "无法设置背景图片，请确认文件存在且可访问")
-    
-    def clear_area_wallpaper(self):
-        """清除当前选择区域的壁纸"""
-        area = self.area_combo.currentData()
-        self.wallpaper_manager.clear_wallpaper(area)
-        self.update_wallpaper_preview(area)
-        self.ui_builder.show_message("操作成功", f"已清除 {self.area_combo.currentText()} 的背景图片")
-    
-    def clear_all_wallpapers(self):
-        """清除所有区域的壁纸"""
-        reply = self.ui_builder.show_question(
-            "确认操作", 
-            "确定要清除所有区域的背景图片吗？",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        
-        if reply == QMessageBox.Yes:
-            self.wallpaper_manager.clear_wallpaper()
-            area = self.area_combo.currentData()
-            self.update_wallpaper_preview(area)
-            self.ui_builder.show_message("操作成功", "已清除所有区域的背景图片")
-    
     def on_menu_changed(self, menu_id):
         """处理菜单切换事件"""
         if menu_id in self.ui_builder.content_pages:
@@ -380,101 +159,65 @@ class MainWindow(QMainWindow):
         """处理启动时最小化设置变更"""
         self.config_manager.set_startup_minimized(checked)
     
-    def reset_form(self):
-        """重置表单内容"""
-        # 时间设为当前时间
-        self.time_edit.setTime(QTime.currentTime())
+    # 以下是代理方法，将调用转发到对应的UI管理类
+    
+    # 托盘相关
+    def close_application(self):
+        self.tray_manager.close_application()
         
-        # 持续时间设为默认值
-        self.duration_spinbox.setValue(10)
-        
-        # 声音设置为默认值
-        self.sound_checkbox.setChecked(True)
-        
-        # 所有星期都选中
-        for checkbox in self.weekday_checkboxes:
-            checkbox.setChecked(True)
-        
-        # 清空消息内容
-        self.message_edit.clear()
-
-
-
-        self.ui_builder.show_message("操作完成", "表单已重置为默认值")        # 提示用户            
+    def show_from_tray(self):
+        self.tray_manager.show_from_tray()
+    
+    # 音频相关
     def select_custom_audio(self):
-        """选择自定义音频文件"""
-        # 从音频管理器获取支持的格式
-        try:
-            from src.utils.sound_manager import get_supported_formats
-            supported_formats = get_supported_formats()
-            
-            # 构建文件过滤器字符串，包含所有支持的格式
-            filters = []
-            for format_key, format_desc in supported_formats.items():
-                filters.append(format_desc)
-            
-            # 添加一个包含所有格式的选项
-            all_extensions = " ".join([f"*.{fmt}" for fmt in supported_formats.keys()])
-            filters.insert(0, f"所有支持的音频文件 ({all_extensions})")
-            
-            # 连接所有过滤器
-            file_filter = ";;".join(filters)
-        except Exception:
-            # 默认格式
-            file_filter = "音频文件 (*.wav *.mp3 *.ogg *.m4a *.aac *.flac);;Wave音频文件 (*.wav)"
-        
-        # 打开文件选择对话框
-        file_path, selected_filter = QFileDialog.getOpenFileName(
-            self,
-            "选择音频文件",
-            "",
-            file_filter
-        )
-        
-        if file_path:
-            from src.utils.sound_manager import set_custom_audio
-            
-            if set_custom_audio(file_path):
-                self.update_audio_path_display()
-                self.ui_builder.show_message("设置成功", "已设置自定义音频，将在下一次提醒时使用。")
-            else:
-                self.ui_builder.show_warning("设置失败", "无法设置音频文件，请确认文件格式正确且可访问。")
+        self.audio_manager_ui.select_custom_audio()
     
     def reset_default_audio(self):
-        """恢复默认音频设置"""
-        from src.utils.sound_manager import reset_to_default_audio
-        
-        if reset_to_default_audio():
-            self.update_audio_path_display()
-            self.ui_builder.show_message("设置成功", "已恢复默认音频设置。")
-        else:
-            self.ui_builder.show_warning("恢复失败", "无法恢复默认音频，请确认默认音频文件存在。")
+        self.audio_manager_ui.reset_default_audio()
     
     def play_test_sound(self):
-        """测试播放当前音效"""
-        from src.utils.sound_manager import play_initial_sound
-        
-        if play_initial_sound():
-            pass  # 播放成功无需提示
-        else:
-            self.ui_builder.show_warning("播放失败", "无法播放音频，请检查音频文件设置。")
+        self.audio_manager_ui.play_test_sound()
     
     def update_audio_path_display(self):
-        """更新音频路径显示"""
-        from src.utils.sound_manager import get_current_audio_path, get_current_audio_format
-        
-        current_path = get_current_audio_path()
-        current_format = get_current_audio_format().upper()
-        
-        if current_path:
-            # 检查是否是默认路径
-            app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            default_path = os.path.join(app_dir, "resources", "attend_class.wav")
-            
-            if os.path.normpath(current_path) == os.path.normpath(default_path):
-                self.audio_path_label.setText("默认音频 (WAV)")
-            else:
-                # 显示路径和格式
-                self.audio_path_label.setText(f"{current_path}\n({current_format})")
-        else:
-            self.audio_path_label.setText("未设置音频")
+        self.audio_manager_ui.update_audio_path_display()
+    
+    # 壁纸相关
+    def select_wallpaper(self):
+        self.wallpaper_manager_ui.select_wallpaper()
+    
+    def clear_wallpaper(self):
+        self.wallpaper_manager_ui.clear_wallpaper()
+    
+    def on_area_changed(self, index):
+        self.wallpaper_manager_ui.on_area_changed(index)
+    
+    def update_wallpaper_preview(self, area):
+        self.wallpaper_manager_ui.update_wallpaper_preview(area)
+    
+    def select_area_wallpaper(self):
+        self.wallpaper_manager_ui.select_area_wallpaper()
+    
+    def clear_area_wallpaper(self):
+        self.wallpaper_manager_ui.clear_area_wallpaper()
+    
+    def clear_all_wallpapers(self):
+        self.wallpaper_manager_ui.clear_all_wallpapers()
+    
+    # 提醒相关
+    def update_reminder_list(self):
+        self.reminder_manager_ui.update_reminder_list()
+    
+    def add_reminder(self):
+        self.reminder_manager_ui.add_reminder()
+    
+    def delete_reminder(self):
+        self.reminder_manager_ui.delete_reminder()
+    
+    def edit_reminder(self):
+        self.reminder_manager_ui.edit_reminder()
+    
+    def test_reminder(self):
+        self.reminder_manager_ui.test_reminder()
+    
+    def reset_form(self):
+        self.reminder_manager_ui.reset_form()
