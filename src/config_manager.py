@@ -121,7 +121,7 @@ class ConfigManager:
     
     def get_startup_minimized(self):
         """获取是否启动时最小化到系统托盘的设置"""
-        return self.get_setting("startup_minimized", False)
+        return self.get_setting("startup_minimized", True)
     
     def set_startup_minimized(self, value):
         """设置是否启动时最小化到系统托盘"""
