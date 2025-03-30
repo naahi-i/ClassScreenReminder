@@ -60,7 +60,11 @@ class ReminderUI:
         # 如果有主区域壁纸，设置背景图片
         if "main" in self.wallpapers and os.path.exists(self.wallpapers["main"]):
             self.block_b.set_background_image(self.wallpapers["main"])
-            self.block_b.color.setAlphaF(0.7)
+            # 使用壁纸透明度设置
+            if "main_opacity" in self.wallpapers:
+                self.block_b.color.setAlphaF(self.wallpapers["main_opacity"])
+            else:
+                self.block_b.color.setAlphaF(0.7)
         
         # 创建色块A（左侧，上层，更深的蓝色）
         opacity_a = 0.95
@@ -69,7 +73,11 @@ class ReminderUI:
         # 如果有左侧区域壁纸，设置背景图片
         if "left" in self.wallpapers and os.path.exists(self.wallpapers["left"]):
             self.block_a.set_background_image(self.wallpapers["left"])
-            self.block_a.color.setAlphaF(0.7)
+            # 使用壁纸透明度设置
+            if "left_opacity" in self.wallpapers:
+                self.block_a.color.setAlphaF(self.wallpapers["left_opacity"])
+            else:
+                self.block_a.color.setAlphaF(0.7)
         
         # 设置几何尺寸，初始高度为0用于动画效果
         self.block_a.setGeometry(0, 0, self.block_a_width, 0)
@@ -83,7 +91,11 @@ class ReminderUI:
         # 如果有上部区域壁纸，设置背景图片
         if "top" in self.wallpapers and os.path.exists(self.wallpapers["top"]):
             self.block_c.set_background_image(self.wallpapers["top"])
-            self.block_c.color.setAlphaF(0.7)
+            # 使用壁纸透明度设置
+            if "top_opacity" in self.wallpapers:
+                self.block_c.color.setAlphaF(self.wallpapers["top_opacity"])
+            else:
+                self.block_c.color.setAlphaF(0.7)
         
         self.block_c.stackUnder(self.block_a)  # 确保层级正确
         
@@ -94,7 +106,11 @@ class ReminderUI:
         # 如果有装饰区域壁纸，设置背景图片
         if "accent" in self.wallpapers and os.path.exists(self.wallpapers["accent"]):
             self.accent_line.set_background_image(self.wallpapers["accent"])
-            self.accent_line.color.setAlphaF(0.7)
+            # 使用壁纸透明度设置
+            if "accent_opacity" in self.wallpapers:
+                self.accent_line.color.setAlphaF(self.wallpapers["accent_opacity"])
+            else:
+                self.accent_line.color.setAlphaF(0.7)
         
         self.accent_line.setGeometry(self.screen_size.width(), self.screen_size.height() // 2 - 7, 0, 14)
         self.accent_line.raise_()

@@ -209,6 +209,28 @@ class MainWindow(QMainWindow):
     def clear_all_wallpapers(self):
         self.wallpaper_manager_ui.clear_all_wallpapers()
     
+    def on_opacity_changed(self, value):
+        """处理壁纸透明度变更"""
+        # 确保值是有效的，然后直接转发到壁纸管理UI组件
+        try:
+            print(f"主窗口收到透明度变更: {value}")
+            
+            # 确保合理范围
+            valid_value = max(0, min(100, value))
+            
+            # 只有当值合法且管理UI组件存在时才处理
+            if hasattr(self, 'wallpaper_manager_ui') and valid_value >= 0 and valid_value <= 100:
+                # 转发处理
+                self.wallpaper_manager_ui.on_opacity_changed(valid_value)
+                
+            # 强制更新标签显示当前值
+            if hasattr(self, 'opacity_value_label'):
+                self.opacity_value_label.setText(f"{valid_value}%")
+        except Exception as e:
+            import traceback
+            print(f"处理透明度变化出错: {e}")
+            traceback.print_exc()
+    
     # 提醒相关
     def update_reminder_list(self):
         self.reminder_manager_ui.update_reminder_list()
