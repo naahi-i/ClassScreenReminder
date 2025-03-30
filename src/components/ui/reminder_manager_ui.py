@@ -107,8 +107,8 @@ class ReminderManagerUI:
             self.main_window.reminder_screen.close()
             self.main_window.reminder_screen = None
         
-        # 创建新的提醒屏幕对象，传入所有区域的壁纸
-        self.main_window.reminder_screen = ReminderScreen(message, int(duration), play_sound, wallpapers)
+        # 创建新的提醒屏幕对象，传入所有区域的壁纸和名片管理器
+        self.main_window.reminder_screen = ReminderScreen(message, int(duration), play_sound, wallpapers, self.main_window.card_manager)
         self.main_window.reminder_screen.show()
     
     def reset_form(self):

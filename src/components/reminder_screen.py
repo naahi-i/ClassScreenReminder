@@ -47,11 +47,12 @@ logger = logging.getLogger("ClassScreenReminder.ReminderScreen")
 class ReminderScreen(QWidget):
     """全屏提醒窗口类"""
     
-    def __init__(self, message, duration=10, play_sound=True, wallpapers=None):
+    def __init__(self, message, duration=10, play_sound=True, wallpapers=None, card_manager=None):
         super().__init__()
         self.message = message
         self.play_sound = play_sound  # 保存声音设置
         self.wallpapers = wallpapers or {}  # 保存壁纸设置，字典格式 {区域: 路径}
+        self.card_manager = card_manager   # 名片管理器
         
         # 根据设置决定是否播放声音
         if play_sound:

@@ -4,6 +4,7 @@ from . import reminder_manager
 from . import wallpaper_manager
 from . import autostart_manager
 from . import resource_manager
+from . import card_manager
 
 # 导出常用功能
 from .sound_manager import play_initial_sound, initialize_sound
@@ -15,6 +16,7 @@ __all__ = [
     'wallpaper_manager',
     'autostart_manager',
     'resource_manager',
+    'card_manager',
     'play_initial_sound',
     'initialize_sound',
     'get_resource_path',

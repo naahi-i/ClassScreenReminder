@@ -15,10 +15,12 @@ try:
     from .components.ui.wallpaper_manager_ui import WallpaperManagerUI
     from .components.ui.tray_manager import TrayManager
     from .components.ui.reminder_manager_ui import ReminderManagerUI
+    from .components.ui.card_manager_ui import CardManagerUI
     from .utils.reminder_manager import ReminderManager
     from .utils.autostart_manager import get_autostart_status, set_autostart
     from .config_manager import ConfigManager
     from .utils.wallpaper_manager import WallpaperManager
+    from .utils.card_manager import CardManager
 except ImportError:
     # 打包后或直接运行时的导入
     try:
@@ -37,10 +39,12 @@ except ImportError:
         from src.components.ui.wallpaper_manager_ui import WallpaperManagerUI
         from src.components.ui.tray_manager import TrayManager
         from src.components.ui.reminder_manager_ui import ReminderManagerUI
+        from src.components.ui.card_manager_ui import CardManagerUI
         from src.utils.reminder_manager import ReminderManager
         from src.utils.autostart_manager import get_autostart_status, set_autostart
         from src.config_manager import ConfigManager
         from src.utils.wallpaper_manager import WallpaperManager
+        from src.utils.card_manager import CardManager
     except ImportError as e:
         print(f"导入错误: {e}")
         sys.exit(1)
@@ -58,6 +62,7 @@ class MainWindow(QMainWindow):
         # 初始化各管理器
         self.reminder_manager = ReminderManager(config_manager)
         self.wallpaper_manager = WallpaperManager(config_manager)
+        self.card_manager = CardManager(config_manager)
         
         # 当前显示的提醒屏幕
         self.reminder_screen = None
@@ -70,6 +75,7 @@ class MainWindow(QMainWindow):
         self.audio_manager_ui = AudioManagerUI(self)
         self.wallpaper_manager_ui = WallpaperManagerUI(self)
         self.reminder_manager_ui = ReminderManagerUI(self)
+        self.card_manager_ui = CardManagerUI(self)
         
         # 设置检查提醒的定时器
         self.timer = QTimer(self)
@@ -121,8 +127,8 @@ class MainWindow(QMainWindow):
             # 获取所有区域的壁纸
             wallpapers = self.wallpaper_manager.get_all_wallpapers()
             
-            # 创建新的提醒屏幕
-            self.reminder_screen = ReminderScreen(message, duration, play_sound, wallpapers)
+            # 创建新的提醒屏幕，传入名片管理器
+            self.reminder_screen = ReminderScreen(message, duration, play_sound, wallpapers, self.card_manager)
             self.reminder_screen.show()
     
     def update_autostart_status(self):
@@ -221,3 +227,13 @@ class MainWindow(QMainWindow):
     
     def reset_form(self):
         self.reminder_manager_ui.reset_form()
+    
+    # 名片相关
+    def add_card(self):
+        self.card_manager_ui.add_card()
+    
+    def edit_card(self):
+        self.card_manager_ui.edit_card()
+    
+    def delete_card(self):
+        self.card_manager_ui.delete_card()

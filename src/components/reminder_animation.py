@@ -95,6 +95,14 @@ class ReminderAnimator:
         # 停止声音定时器
         self.parent.sound_repeat_timer.stop()
         
+        # 先开始名片退场动画
+        self.ui.start_cards_exit_animation()
+        
+        # 延迟一小段时间后开始其他组件的退场动画
+        QTimer.singleShot(300, self.start_main_close_animation)
+    
+    def start_main_close_animation(self):
+        """开始主要组件的退场动画"""
         # 色块C从当前位置收缩回屏幕右侧
         anim_c = QPropertyAnimation(self.ui.block_c, b"geometry")
         anim_c.setDuration(800)

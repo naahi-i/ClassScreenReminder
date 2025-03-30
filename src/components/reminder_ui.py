@@ -1,10 +1,11 @@
 import os
 from datetime import datetime
 from PySide6.QtWidgets import QLabel, QFrame, QVBoxLayout, QGraphicsDropShadowEffect
-from PySide6.QtCore import Qt, QRect
+from PySide6.QtCore import Qt, QRect, QTimer
 from PySide6.QtGui import QGuiApplication, QColor
 
 from .ui_components import ColorBlock, LightEffectBlock
+from .card_ui import Card
 
 class ReminderUI:
     """负责提醒屏幕的UI组件创建与初始化"""
@@ -24,6 +25,7 @@ class ReminderUI:
         self.message_container = None
         self.message_decoration = None
         self.hint_label = None
+        self.cards = []  # 存储名片组件列表
         
         # 计算尺寸
         self.screen_size = QGuiApplication.primaryScreen().size()
@@ -96,6 +98,65 @@ class ReminderUI:
         
         self.accent_line.setGeometry(self.screen_size.width(), self.screen_size.height() // 2 - 7, 0, 14)
         self.accent_line.raise_()
+        
+        # 在创建色块A后添加名片
+        self.display_cards()
+    
+    def display_cards(self):
+        """显示展示片，左侧对齐排列"""
+        if not hasattr(self.parent, 'card_manager') or self.parent.card_manager is None:
+            return
+            
+        cards_data = self.parent.card_manager.get_all_cards()
+        
+        # 基础设置
+        start_y = 50  # 起始Y坐标
+        spacing = 16  # 卡片间距
+        left_margin = 20  # 左侧边距
+        
+        for i, card_data in enumerate(cards_data):
+            card = Card(card_data, self.block_a)
+            
+            # 计算卡片需要的宽度 (基于内容)
+            card.adjustSize()
+            
+            # 检查是否只有图片，无文字信息
+            name = card_data.get("name", "")
+            title = card_data.get("title", "")
+            has_text_info = bool(name.strip() or title.strip())
+            
+            # 根据是否有文本内容设置不同的宽度
+            if has_text_info:
+                # 正常卡片
+                text_length = max(len(name), len(title))
+                card_width = min(self.block_a_width - 50, 86 + min(14 * text_length, 250) + 42)
+            else:
+                # 纯图片卡片，使用正方形尺寸
+                card_width = 110
+            
+            card_height = card.sizeHint().height()
+            
+            # 设置初始位置（在屏幕外）
+            card.setGeometry(-300, start_y, card_width, card_height)
+            
+            # 错位启动动画以匹配色块动画风格
+            base_delay = 580  # 调整基础延迟
+            delay = base_delay + i * 150  # 每个卡片延迟递增，类似色块错位效果
+            
+            QTimer.singleShot(delay, lambda c=card, sx=-300, ex=left_margin, y=start_y: 
+                            c.start_enter_animation(sx, ex, y))
+            
+            # 更新下一张卡片的起始位置
+            start_y += card_height + spacing
+            
+            self.cards.append(card)
+
+    def start_cards_exit_animation(self):
+        """开始名片退场动画"""
+        for i, card in enumerate(self.cards):
+            # 错位启动退场动画，使用更短的间隔
+            QTimer.singleShot(i * 180, lambda c=card: 
+                            c.start_exit_animation(c.x(), -400))
     
     def _create_time_display(self):
         """创建时间显示"""
